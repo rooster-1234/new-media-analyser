@@ -10,6 +10,7 @@ import time
 import urllib.parse
 import urllib.request
 from typing import Any, Dict, List, Optional
+from pathlib import Path
 from dotenv import load_dotenv
 from playwright.async_api import async_playwright
 from playwright_stealth import Stealth
