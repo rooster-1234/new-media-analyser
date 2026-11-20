@@ -59,3 +59,10 @@ Options:
 - `--summary-only`: Prints the summary in the terminal without writing the full JSON.
 - `--output <path>`: Specify a custom path for the output JSON profile (defaults to `plex_library_profile.json`).
 - `--env-file <path>`: Specify a custom `.env` path.
+
+---
+
+## Documentation & Project Tracking
+
+- [CHANGELOG.md](CHANGELOG.md) — Documented release history and changes.
+- [ROADMAP.md](ROADMAP.md) — Planned milestones, containerisation, and feature to-do list.
