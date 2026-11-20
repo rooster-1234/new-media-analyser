@@ -15,6 +15,7 @@ from playwright.async_api import async_playwright
 from playwright_stealth import Stealth
 from filter import MediaFilter
 from retrieve_media import get_downloader
+from plex_analyzer import plex_oauth_login, PlexLibraryAnalyzer
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
@@ -30,8 +31,45 @@ OMDB_API_KEY = os.getenv("OMDB_API_KEY", "").strip()
 IMDB_CACHE_DB = os.path.join(OUTPUT_DIR, "imdb_ratings.db")
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-# Initialize media filter with Plex profile and .env criteria
-media_filter = MediaFilter()
+# Media filter instance (initialized on demand or during ensure_plex_profile)
+media_filter: Optional[MediaFilter] = None
+
+
+def ensure_plex_profile(force_sync: bool = False, profile_path: str = "plex_library_profile.json") -> MediaFilter:
+    """
+    Ensures that a valid Plex library profile exists for duplicate checking and genre matching.
+    If PLEX_TOKEN is missing, launches official Plex OAuth in the user's browser.
+    If the profile file does not exist or force_sync is requested, scans Plex and generates it.
+    """
+    global media_filter
+    plex_token = os.getenv("PLEX_TOKEN", "").strip()
+    profile_file = Path(profile_path)
+
+    # 1. Trigger OAuth login if token is missing
+    if not plex_token or "your_plex_token" in plex_token:
+        logger.info("Plex token is missing in .env. Launching official Plex OAuth login in your browser...")
+        if plex_oauth_login():
+            load_dotenv(override=True)
+            plex_token = os.getenv("PLEX_TOKEN", "").strip()
+        else:
+            logger.warning("Plex OAuth login was not completed. Proceeding without Plex library synchronization.")
+
+    # 2. Generate or refresh profile if missing or requested
+    if (force_sync or not profile_file.exists()) and plex_token:
+        plex_url = os.getenv("PLEX_URL", "").strip()
+        logger.info("Generating Plex library profile from Plex Media Server...")
+        try:
+            analyzer = PlexLibraryAnalyzer(base_url=plex_url, token=plex_token)
+            if analyzer.connect():
+                profile_data = analyzer.generate_profile()
+                with open(profile_file, "w", encoding="utf-8") as f:
+                    json.dump(profile_data, f, indent=2, ensure_ascii=False)
+                logger.info(f"Successfully generated and saved Plex profile to '{profile_path}'.")
+        except Exception as e:
+            logger.warning(f"Could not generate Plex profile: {e}")
+
+    media_filter = MediaFilter(profile_path=profile_path)
+    return media_filter
 
 # Cache for IMDb metadata (score, genres) to avoid redundant network calls
 imdb_cache: Dict[str, Dict[str, Any]] = {}
@@ -228,6 +266,8 @@ async def fetch_media_index() -> List[Dict[str, str]]:
     """
     Scrapes the media index site, extracts release links, and retrieves IMDb scores.
     """
+    ensure_plex_profile()
+
     if not SITE_SCAN:
         logger.error("SITE_SCAN environment variable is not set.")
         return [{"error": "SITE_SCAN variable missing in .env"}]
@@ -897,6 +937,19 @@ def generate_html(data: List[Dict[str, Any]], file_path: str):
 
 
 if __name__ == "__main__":
+    import argparse
+    parser = argparse.ArgumentParser(description="Scrape and analyze new media releases against Plex library.")
+    parser.add_argument("--login", action="store_true", help="Log in to Plex via official browser OAuth")
+    parser.add_argument("--sync-plex", action="store_true", help="Re-scan Plex library and refresh profile before scraping")
+    args = parser.parse_args()
+
+    if args.login:
+        plex_oauth_login()
+        load_dotenv(override=True)
+
+    if args.sync_plex:
+        ensure_plex_profile(force_sync=True)
+
     async def main():
         data = await fetch_media_index()
         sanitized = sanitize_output(data)
