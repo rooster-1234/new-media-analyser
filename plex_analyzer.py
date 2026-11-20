@@ -509,8 +509,15 @@ def plex_oauth_login(env_file: str = ".env", timeout: int = 180) -> bool:
             target_server = servers[0]
             server_name = target_server.name
             try:
-                server_conn = target_server.connect(timeout=10)
-                detected_url = server_conn._baseurl
+                # Suppress PlexAPI connection probe errors while it tests remote vs local endpoints
+                plex_logger = logging.getLogger("plexapi")
+                prev_level = plex_logger.level
+                plex_logger.setLevel(logging.CRITICAL)
+                try:
+                    server_conn = target_server.connect(timeout=8)
+                    detected_url = server_conn._baseurl
+                finally:
+                    plex_logger.setLevel(prev_level)
                 print(f"[+] Verified active connection to '{server_name}' at: {detected_url}")
             except Exception:
                 local_conns = [c for c in target_server.connections if c.local]
