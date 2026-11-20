@@ -1,0 +1,30 @@
+# Environment and secrets (CRITICAL: Never commit real keys or passwords)
+.env
+.env.*
+!.env.template
+
+# Virtual Environments
+.venv/
+.venv_linux/
+venv/
+ENV/
+env/
+
+# Python cache & build
+__pycache__/
+*.py[cod]
+*$py.class
+*.log
+
+# Project specific caches & data
+plex_library_profile.json
+output/
+*.db
+*.tmp
+*.sqlite
+
+# OS and Editor files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
