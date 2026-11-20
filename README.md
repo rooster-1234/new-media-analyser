@@ -27,21 +27,26 @@ An intelligent media analyzer system that inspects your existing Plex library, i
 
 ## Setup & Running the Plex Analyzer
 
-### 1. Configuration
-Copy `.env.template` to `.env` and fill in your Plex server details:
+### 1. Configuration & 1-Click Plex Sign-In
+Copy `.env.template` to `.env`:
 
 ```bash
 cp .env.template .env
 ```
 
-Edit `.env`:
-```env
-PLEX_URL=http://localhost:32400
-PLEX_TOKEN=your_plex_token_here
+You can automatically authenticate using official Plex OAuth in your browser:
+
+```powershell
+.\.venv\Scripts\python.exe plex_analyzer.py --login
 ```
 
-> **How to find your Plex Token:**
-> Refer to the official Plex guide: [Finding an Authentication Token (X-Plex-Token)](https://support.plex.tv/articles/204059436-finding-an-authentication-token-x-plex-token/)
+This will:
+- Open your default browser with the official Plex sign-in screen.
+- Automatically retrieve your Plex authentication token.
+- Discover your Plex Media Server (e.g. NAS) and its connection URL.
+- Automatically save `PLEX_TOKEN` and `PLEX_URL` into `.env` for you!
+
+*(Manual token setup via [Finding an Authentication Token](https://support.plex.tv/articles/204059436-finding-an-authentication-token-x-plex-token/) is also supported).*
 
 ### 2. Run the Analyzer
 Using the virtual environment:

@@ -8,6 +8,8 @@ import os
 import sys
 import json
 import re
+import time
+import webbrowser
 import concurrent.futures
 from collections import Counter
 from datetime import datetime
@@ -17,6 +19,7 @@ from dotenv import load_dotenv
 try:
     from plexapi.server import PlexServer
     from plexapi.exceptions import Unauthorized, NotFound
+    from plexapi.myplex import MyPlexPinLogin, MyPlexAccount
 except ImportError:
     print("Error: 'plexapi' is not installed. Please run: pip install -r requirements.txt")
     sys.exit(1)
@@ -421,12 +424,125 @@ def print_summary(profile: dict):
     print("=" * 68 + "\n")
 
 
+def update_env_variable(env_file_path: str, key: str, value: str) -> None:
+    """Safely update or add an environment variable in a .env file."""
+    path = Path(env_file_path)
+    if not path.exists():
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(f"{key}={value}\n")
+        return
+
+    content = path.read_text(encoding="utf-8")
+    pattern = re.compile(rf"^{re.escape(key)}=.*$", flags=re.MULTILINE)
+    if pattern.search(content):
+        new_content = pattern.sub(f"{key}={value}", content)
+    else:
+        new_content = content.rstrip() + f"\n{key}={value}\n"
+    path.write_text(new_content, encoding="utf-8")
+
+
+def plex_oauth_login(env_file: str = ".env", timeout: int = 180) -> bool:
+    """
+    Guides the user through official Plex OAuth login via their web browser.
+    Retrieves the Plex authentication token, discovers their Plex server,
+    and updates the .env configuration file automatically.
+    """
+    print("\n" + "=" * 68)
+    print("                 Plex Official OAuth Sign-In")
+    print("=" * 68)
+
+    headers = {
+        "X-Plex-Product": "New Media Analyser",
+        "X-Plex-Version": "1.0",
+        "X-Plex-Device": "Windows",
+        "X-Plex-Device-Name": "New Media Analyser",
+    }
+
+    print("\n[1/3] Requesting authorization session from Plex...")
+    try:
+        pinlogin = MyPlexPinLogin(oauth=True, headers=headers)
+        pinlogin.run(timeout=timeout)
+        oauth_url = pinlogin.oauthUrl()
+    except Exception as e:
+        print(f"Error starting Plex OAuth session: {e}")
+        return False
+
+    print("\n[2/3] Opening your browser to authorize New Media Analyser...")
+    print("-" * 68)
+    print("If your browser does not open automatically, visit:")
+    print(f"\n  {oauth_url}\n")
+    print("-" * 68)
+    print("Waiting for authorization in browser...", end="", flush=True)
+
+    try:
+        webbrowser.open(oauth_url)
+    except Exception:
+        pass
+
+    while not pinlogin.finished:
+        time.sleep(1.5)
+        print(".", end="", flush=True)
+
+    print("\n")
+    if pinlogin.expired or not pinlogin.token:
+        print("[!] Login expired or was cancelled by user.\n")
+        return False
+
+    token = pinlogin.token
+    print("[+] Successfully authenticated with Plex!")
+
+    # Server discovery
+    print("\n[3/3] Discovering Plex Media Server associated with your account...")
+    detected_url = None
+    server_name = None
+    try:
+        account = MyPlexAccount(token=token)
+        print(f"Logged in as: {account.username} ({account.email})")
+        servers = [r for r in account.resources() if "server" in r.provides]
+        if not servers:
+            print("[!] No Plex Media Servers found on this account.")
+        else:
+            print(f"Found {len(servers)} server(s):")
+            for idx, s in enumerate(servers):
+                print(f"  [{idx + 1}] {s.name} (owned={s.owned})")
+
+            target_server = servers[0]
+            server_name = target_server.name
+            try:
+                server_conn = target_server.connect(timeout=10)
+                detected_url = server_conn._baseurl
+                print(f"[+] Verified active connection to '{server_name}' at: {detected_url}")
+            except Exception:
+                local_conns = [c for c in target_server.connections if c.local]
+                if local_conns:
+                    detected_url = local_conns[0].uri
+                elif target_server.connections:
+                    detected_url = target_server.connections[0].uri
+                print(f"[+] Detected server address for '{server_name}': {detected_url}")
+    except Exception as e:
+        print(f"[!] Server discovery note: {e}")
+
+    # Save to .env
+    print(f"\nUpdating configuration in '{env_file}'...")
+    update_env_variable(env_file, "PLEX_TOKEN", token)
+    print(f"[+] Saved PLEX_TOKEN to '{env_file}'")
+
+    existing_url = os.getenv("PLEX_URL", "").strip()
+    if detected_url and (not existing_url or "localhost" in existing_url or "your_plex" in existing_url):
+        update_env_variable(env_file, "PLEX_URL", detected_url)
+        print(f"[+] Updated PLEX_URL={detected_url} in '{env_file}'")
+
+    print("=" * 68 + "\n")
+    return True
+
+
 def main():
     import argparse
     parser = argparse.ArgumentParser(description="Analyze Plex Media Library and extract user preferences.")
     parser.add_argument("--env-file", default=".env", help="Path to .env configuration file")
     parser.add_argument("--output", default="plex_library_profile.json", help="Path for JSON output profile")
     parser.add_argument("--summary-only", action="store_true", help="Print summary without writing full JSON")
+    parser.add_argument("--login", action="store_true", help="Log in to Plex via official OAuth in your browser")
     args = parser.parse_args()
 
     # Load environment variables
@@ -436,14 +552,28 @@ def main():
     else:
         load_dotenv()
 
+    if args.login:
+        success = plex_oauth_login(env_file=args.env_file)
+        if not success:
+            sys.exit(1)
+        # Reload environment variables after login
+        if env_path.exists():
+            load_dotenv(dotenv_path=env_path, override=True)
+
     plex_url = os.getenv("PLEX_URL")
     plex_token = os.getenv("PLEX_TOKEN")
 
     if not plex_url or not plex_token or "your_plex_token" in plex_token:
-        print("\n[!] Configuration missing.")
-        print(f"Please configure your Plex URL and Token in '{args.env_file}' or set PLEX_URL and PLEX_TOKEN environment variables.")
-        print("A template is available at '.env.template'.\n")
-        sys.exit(1)
+        print("\n[!] Plex configuration missing.")
+        print("Launching Plex OAuth login to authenticate...\n")
+        if plex_oauth_login(env_file=args.env_file):
+            if env_path.exists():
+                load_dotenv(dotenv_path=env_path, override=True)
+            plex_url = os.getenv("PLEX_URL")
+            plex_token = os.getenv("PLEX_TOKEN")
+        else:
+            print("Authentication aborted. Exiting.")
+            sys.exit(1)
 
     movie_libs = [l.strip() for l in os.getenv("PLEX_MOVIE_LIBRARIES", "").split(",") if l.strip()]
     tv_libs = [l.strip() for l in os.getenv("PLEX_TV_LIBRARIES", "").split(",") if l.strip()]
