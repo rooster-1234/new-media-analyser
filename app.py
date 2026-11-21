@@ -243,8 +243,8 @@ def render_login_page(error: str = "") -> str:
     <style>
         body {{
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-            background: #0f172a;
-            color: #f8fafc;
+            background: #121212;
+            color: #e0e0e0;
             display: flex;
             align-items: center;
             justify-content: center;
@@ -254,8 +254,8 @@ def render_login_page(error: str = "") -> str:
             box-sizing: border-box;
         }}
         .auth-card {{
-            background: #1e293b;
-            border: 1px solid #334155;
+            background: #1e1e1e;
+            border: 1px solid #333;
             border-radius: 12px;
             padding: 32px;
             width: 100%;
@@ -279,7 +279,7 @@ def render_login_page(error: str = "") -> str:
         }}
         .tab-buttons {{
             display: flex;
-            border-bottom: 1px solid #334155;
+            border-bottom: 1px solid #333;
             margin-bottom: 20px;
         }}
         .tab-btn {{
@@ -312,8 +312,8 @@ def render_login_page(error: str = "") -> str:
             width: 100%;
             padding: 10px 12px;
             border-radius: 6px;
-            border: 1px solid #475569;
-            background: #0f172a;
+            border: 1px solid #333;
+            background: #121212;
             color: #fff;
             font-size: 14px;
             box-sizing: border-box;
@@ -328,7 +328,7 @@ def render_login_page(error: str = "") -> str:
             padding: 11px;
             border-radius: 6px;
             border: none;
-            background: #0284c7;
+            background: #2563eb;
             color: white;
             font-size: 15px;
             font-weight: 600;
@@ -337,7 +337,7 @@ def render_login_page(error: str = "") -> str:
             margin-top: 8px;
         }}
         .btn-submit:hover {{
-            background: #0369a1;
+            background: #1d4ed8;
         }}
         .error-msg {{
             background: rgba(239, 68, 68, 0.15);
@@ -456,8 +456,8 @@ def render_settings_page(username: str, settings: Dict[str, Any]) -> str:
     <style>
         body {{
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-            background: #0f172a;
-            color: #f8fafc;
+            background: #121212;
+            color: #e0e0e0;
             margin: 0;
             padding: 24px;
         }}
@@ -465,21 +465,31 @@ def render_settings_page(username: str, settings: Dict[str, Any]) -> str:
             display: flex;
             justify-content: space-between;
             align-items: center;
-            background: #1e293b;
-            padding: 12px 24px;
-            border-radius: 10px;
-            border: 1px solid #334155;
+            background: #1e1e1e;
+            padding: 12px 20px;
+            border-radius: 8px;
+            border: 1px solid #333;
             margin-bottom: 24px;
+            flex-wrap: wrap;
+            gap: 12px;
         }}
         .navbar h2 {{ margin: 0; font-size: 18px; color: #38bdf8; }}
-        .nav-links {{ display: flex; align-items: center; gap: 16px; font-size: 14px; }}
+        .user-pill {{
+            font-size: 13px;
+            padding: 4px 12px;
+            border-radius: 9999px;
+            background: #252525;
+            border: 1px solid #444;
+            color: #f8fafc;
+        }}
+        .nav-links {{ display: flex; align-items: center; gap: 12px; font-size: 14px; flex-wrap: wrap; }}
         .nav-links a {{ color: #cbd5e1; text-decoration: none; }}
         .nav-links a:hover {{ color: #38bdf8; }}
         .container {{ max-width: 900px; margin: 0 auto; }}
         .section-card {{
-            background: #1e293b;
-            border: 1px solid #334155;
-            border-radius: 10px;
+            background: #1e1e1e;
+            border: 1px solid #333;
+            border-radius: 8px;
             padding: 24px;
             margin-bottom: 24px;
         }}
@@ -487,8 +497,8 @@ def render_settings_page(username: str, settings: Dict[str, Any]) -> str:
             margin-top: 0;
             color: #f8fafc;
             font-size: 16px;
-            border-bottom: 1px solid #334155;
-            padding-bottom: 10px;
+            border-bottom: 1px solid #333;
+            padding-bottom: 12px;
             display: flex;
             align-items: center;
             justify-content: space-between;
@@ -502,16 +512,17 @@ def render_settings_page(username: str, settings: Dict[str, Any]) -> str:
         .form-group {{ margin-bottom: 12px; }}
         .form-group.full-width {{ grid-column: 1 / -1; }}
         label {{ display: block; font-size: 13px; color: #94a3b8; margin-bottom: 6px; font-weight: 500; }}
-        input[type="text"], input[type="number"], select {{
+        input[type="text"], input[type="number"], input[type="password"], select {{
             width: 100%;
             padding: 9px 12px;
-            background: #0f172a;
-            border: 1px solid #475569;
+            background: #121212;
+            border: 1px solid #333;
             border-radius: 6px;
             color: #fff;
             font-size: 14px;
             box-sizing: border-box;
             outline: none;
+            transition: border-color 0.15s ease-in-out;
         }}
         input:focus, select:focus {{ border-color: #38bdf8; }}
         .btn {{
@@ -522,11 +533,32 @@ def render_settings_page(username: str, settings: Dict[str, Any]) -> str:
             font-weight: 600;
             cursor: pointer;
             transition: all 0.15s ease-in-out;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
         }}
-        .btn-primary {{ background: #0284c7; color: white; }}
-        .btn-primary:hover {{ background: #0369a1; }}
-        .btn-test {{ background: #334155; color: #38bdf8; border: 1px solid #475569; }}
-        .btn-test:hover {{ background: #475569; }}
+        .btn-primary {{ background: #2563eb; color: white; }}
+        .btn-primary:hover {{ background: #1d4ed8; }}
+        .btn-test {{ background: #252525; color: #38bdf8; border: 1px solid #444; }}
+        .btn-test:hover {{ background: #333; border-color: #555; }}
+        .btn-signout {{
+            background: rgba(239, 68, 68, 0.15);
+            color: #f87171;
+            border: 1px solid rgba(239, 68, 68, 0.35);
+            padding: 6px 14px;
+            border-radius: 6px;
+            font-size: 13px;
+            font-weight: 600;
+            display: inline-flex;
+            align-items: center;
+            transition: all 0.15s ease-in-out;
+        }}
+        .btn-signout:hover {{
+            background: rgba(239, 68, 68, 0.25);
+            color: #fca5a5;
+            border-color: #ef4444;
+        }}
         .btn-save-all {{
             background: #10b981;
             color: white;
@@ -548,15 +580,20 @@ def render_settings_page(username: str, settings: Dict[str, Any]) -> str:
         
         .genre-pill-container {{ display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }}
         .genre-pill {{
-            padding: 4px 10px;
+            padding: 5px 12px;
             border-radius: 9999px;
             font-size: 12px;
             font-weight: 500;
-            background: #0f172a;
+            background: #181818;
             color: #94a3b8;
-            border: 1px solid #334155;
+            border: 1px solid #333;
             cursor: pointer;
             user-select: none;
+            transition: all 0.15s ease-in-out;
+        }}
+        .genre-pill:hover {{
+            border-color: #555;
+            color: #f8fafc;
         }}
         .genre-pill.active {{
             background: rgba(239, 68, 68, 0.2);
@@ -581,9 +618,9 @@ def render_settings_page(username: str, settings: Dict[str, Any]) -> str:
     <div class="navbar">
         <h2>New Media Analyser</h2>
         <div class="nav-links">
-            <span>👤 Logged in as <strong>{html.escape(username)}</strong></span>
+            <span class="user-pill">👤 <strong>{html.escape(username)}</strong></span>
             <a href="/dashboard" class="btn btn-primary" style="text-decoration: none;">📊 Dashboard</a>
-            <a href="/api/auth/logout" class="btn btn-test" style="text-decoration: none; color: #f87171; border-color: rgba(248, 113, 113, 0.3);">Sign Out</a>
+            <a href="/api/auth/logout" class="btn btn-signout" style="text-decoration: none;">Sign Out</a>
         </div>
     </div>
 
@@ -1241,9 +1278,46 @@ def render_dashboard_page(username: str, settings: Dict[str, Any], items: List[D
             border: 1px solid #444;
             color: #f8fafc;
         }}
-        .nav-links {{ display: flex; align-items: center; gap: 16px; font-size: 14px; }}
+        .nav-links {{ display: flex; align-items: center; gap: 12px; font-size: 14px; flex-wrap: wrap; }}
         .nav-links a {{ color: #cbd5e1; text-decoration: none; }}
         .nav-links a:hover {{ color: #38bdf8; }}
+        .btn-settings {{
+            background: #252525;
+            color: #cbd5e1;
+            border: 1px solid #444;
+            padding: 6px 14px;
+            border-radius: 6px;
+            font-size: 13px;
+            font-weight: 600;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            text-decoration: none;
+            transition: all 0.15s ease-in-out;
+        }}
+        .btn-settings:hover {{
+            background: #333;
+            color: #38bdf8;
+            border-color: #555;
+        }}
+        .btn-signout {{
+            background: rgba(239, 68, 68, 0.15);
+            color: #f87171;
+            border: 1px solid rgba(239, 68, 68, 0.35);
+            padding: 6px 14px;
+            border-radius: 6px;
+            font-size: 13px;
+            font-weight: 600;
+            display: inline-flex;
+            align-items: center;
+            text-decoration: none;
+            transition: all 0.15s ease-in-out;
+        }}
+        .btn-signout:hover {{
+            background: rgba(239, 68, 68, 0.25);
+            color: #fca5a5;
+            border-color: #ef4444;
+        }}
 
         /* Action Scan Banner */
         .scan-banner {{
@@ -1542,8 +1616,8 @@ def render_dashboard_page(username: str, settings: Dict[str, Any], items: List[D
             {downloader_pill_html}
         </div>
         <div class="nav-links">
-            <a href="/settings">⚙️ Settings</a>
-            <a href="/api/auth/logout" style="color: #f87171;">Logout</a>
+            <a href="/settings" class="btn-settings">⚙️ Settings</a>
+            <a href="/api/auth/logout" class="btn-signout">Sign Out</a>
         </div>
     </div>
 
