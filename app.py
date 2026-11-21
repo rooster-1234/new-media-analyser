@@ -831,6 +831,34 @@ def render_dashboard_page(username: str, settings: Dict[str, Any], items: List[D
         "all": "All Servers"
     }.get(server_raw.lower(), server_raw.capitalize())
 
+    has_server = bool(settings.get("plex_token") or settings.get("jellyfin_key") or settings.get("emby_key"))
+    has_downloader = bool(settings.get("radarr_api_key") or (settings.get("rutorrent_url") and settings.get("rutorrent_user")))
+
+    if has_server:
+        server_pill_html = f'<span class="user-pill pill-online">Server: <strong>{html.escape(server_name)}</strong></span>'
+    else:
+        server_pill_html = '<a href="/settings" class="user-pill pill-warning" title="Connect your media server in Settings">Server: ⚠️ Not Connected (Setup →)</a>'
+
+    if has_downloader:
+        downloader_pill_html = f'<span class="user-pill pill-online">Downloader: <strong>{html.escape(downloader_name)}</strong></span>'
+    else:
+        downloader_pill_html = '<a href="/settings" class="user-pill pill-warning" title="Configure Radarr or ruTorrent in Settings">Downloader: ⚠️ Not Configured (Setup →)</a>'
+
+    onboarding_banner_html = ""
+    if not has_server:
+        onboarding_banner_html = f"""
+    <div class="onboarding-banner" id="onboardingBanner">
+        <div class="onboarding-text">
+            <h4>👋 Welcome to New Media Analyser, {html.escape(username)}!</h4>
+            <p>You are viewing real-time media releases from <strong>The Pirate Bay</strong> and <strong>uIndex</strong>. To automatically hide movies you already own and unlock personalized genre match scores, connect your <strong>Jellyfin, Plex, or Emby</strong> library!</p>
+        </div>
+        <div class="onboarding-actions">
+            <a href="/settings" class="btn-setup">⚙️ Connect Media Server</a>
+            <button type="button" class="btn-dismiss" onclick="document.getElementById('onboardingBanner').style.display='none'">Dismiss</button>
+        </div>
+    </div>
+    """
+
     counts = {"Consider": 0, "Exists": 0, "Too Old": 0, "Low Score": 0, "Non-English": 0}
     genre_counts = {"High": 0, "Medium": 0, "Low": 0}
     for item in items:
@@ -1106,6 +1134,116 @@ def render_dashboard_page(username: str, settings: Dict[str, Any], items: List[D
         .btn-request.btn-success {{ background: rgba(34, 197, 94, 0.2); color: #4ade80; border: 1px solid rgba(34, 197, 94, 0.4); cursor: default; }}
         .btn-request.btn-failed {{ background: rgba(239, 68, 68, 0.2); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.4); }}
 
+        /* Onboarding Banner */
+        .onboarding-banner {{
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: linear-gradient(135deg, rgba(30, 58, 138, 0.45), rgba(88, 28, 135, 0.4));
+            border: 1px solid rgba(147, 51, 234, 0.45);
+            border-radius: 8px;
+            padding: 16px 20px;
+            margin-bottom: 20px;
+            gap: 16px;
+            flex-wrap: wrap;
+        }}
+        .onboarding-text h4 {{ margin: 0 0 6px 0; color: #c084fc; font-size: 15px; font-weight: 700; }}
+        .onboarding-text p {{ margin: 0; color: #cbd5e1; font-size: 13px; line-height: 1.45; max-width: 680px; }}
+        .onboarding-actions {{ display: flex; align-items: center; gap: 10px; }}
+        .btn-setup {{
+            background: #9333ea;
+            color: #fff;
+            padding: 8px 16px;
+            border-radius: 6px;
+            font-size: 13px;
+            font-weight: 600;
+            text-decoration: none;
+            transition: all 0.15s ease-in-out;
+            white-space: nowrap;
+            display: inline-block;
+        }}
+        .btn-setup:hover {{ background: #7e22ce; }}
+        .btn-dismiss {{
+            background: rgba(255, 255, 255, 0.1);
+            color: #cbd5e1;
+            border: 1px solid #475569;
+            padding: 7px 12px;
+            border-radius: 6px;
+            font-size: 12px;
+            cursor: pointer;
+        }}
+        .btn-dismiss:hover {{ background: rgba(255, 255, 255, 0.18); }}
+
+        .user-pill.pill-warning {{
+            background: rgba(245, 158, 11, 0.15);
+            color: #fbbf24;
+            border-color: rgba(245, 158, 11, 0.4);
+            text-decoration: none;
+            transition: all 0.15s ease-in-out;
+        }}
+        .user-pill.pill-warning:hover {{
+            background: rgba(245, 158, 11, 0.25);
+            color: #fef08a;
+        }}
+        .user-pill.pill-online {{
+            background: rgba(34, 197, 94, 0.15);
+            color: #4ade80;
+            border-color: rgba(34, 197, 94, 0.35);
+        }}
+
+        /* Modal Overlay */
+        .modal-overlay {{
+            display: none;
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0, 0, 0, 0.75);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }}
+        .modal {{
+            background: #1e1e1e;
+            border: 1px solid #333;
+            border-radius: 10px;
+            padding: 24px;
+            max-width: 520px;
+            width: 90%;
+            color: #f8fafc;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+        }}
+        .modal h3 {{ margin-top: 0; font-size: 18px; color: #f8fafc; }}
+        .modal p {{ font-size: 14px; color: #94a3b8; line-height: 1.5; }}
+        .code-box {{
+            background: #111;
+            border: 1px solid #333;
+            padding: 10px 12px;
+            border-radius: 6px;
+            font-family: monospace;
+            font-size: 13px;
+            color: #38bdf8;
+            word-break: break-all;
+            margin: 12px 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 8px;
+        }}
+        .code-box button {{
+            background: #2563eb;
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: 600;
+            white-space: nowrap;
+        }}
+        .code-box button:hover {{ background: #1d4ed8; }}
+        .modal-buttons {{ display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }}
+        .btn-close {{ background: #333; color: white; border: none; padding: 6px 14px; border-radius: 6px; cursor: pointer; }}
+        .btn-close:hover {{ background: #444; }}
+
         /* Toast notifications */
         .toast-container {{ position: fixed; bottom: 20px; right: 20px; z-index: 9999; display: flex; flex-direction: column; gap: 8px; }}
         .toast {{
@@ -1129,14 +1267,16 @@ def render_dashboard_page(username: str, settings: Dict[str, Any], items: List[D
         <h2>New Media Analyser</h2>
         <div class="nav-status-group">
             <span class="user-pill">👤 <strong>{html.escape(username)}</strong></span>
-            <span class="user-pill">Server: <strong>{html.escape(server_name)}</strong></span>
-            <span class="user-pill">Downloader: <strong>{html.escape(downloader_name)}</strong></span>
+            {server_pill_html}
+            {downloader_pill_html}
         </div>
         <div class="nav-links">
             <a href="/settings">⚙️ Settings</a>
             <a href="/api/auth/logout" style="color: #f87171;">Logout</a>
         </div>
     </div>
+
+    {onboarding_banner_html}
 
     <!-- Live Scan Banner with GO Button -->
     <div class="scan-banner">
@@ -1195,6 +1335,22 @@ def render_dashboard_page(username: str, settings: Dict[str, Any], items: List[D
     </table>
     <div class="no-matches" id="noMatches">No releases match this filter.</div>
 
+    <!-- Modal for Manual Magnet Copy / Downloader Unconfigured -->
+    <div class="modal-overlay" id="fallbackModal">
+        <div class="modal">
+            <h3 id="modalTitle">Downloader Not Configured</h3>
+            <p id="modalDesc">You haven't configured a downloader client (Radarr or ruTorrent) yet in your Settings. You can copy the direct torrent magnet link below to download manually with any BitTorrent client:</p>
+            <div class="code-box">
+                <span id="modalMagnetText" style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:320px; font-size:12px;"></span>
+                <button type="button" onclick="copyMagnetFromModal()">Copy Magnet</button>
+            </div>
+            <div class="modal-buttons" style="display:flex; justify-content:space-between; align-items:center; margin-top:16px;">
+                <a href="/settings" class="btn-setup" style="font-size:12px; text-decoration:none; margin-right:auto;">⚙️ Configure Downloader in Settings</a>
+                <button type="button" class="btn-close" onclick="closeModal()">Close</button>
+            </div>
+        </div>
+    </div>
+
     <div class="toast-container" id="toastContainer"></div>
 
     <script>
@@ -1208,6 +1364,7 @@ def render_dashboard_page(username: str, settings: Dict[str, Any], items: List[D
         let currentFilterType = 'all';
         let currentFilterVal = '';
         let currentSourceFilter = 'all';
+        let currentActiveMagnet = '';
 
         function showToast(msg, type) {{
             const c = document.getElementById('toastContainer');
@@ -1216,6 +1373,26 @@ def render_dashboard_page(username: str, settings: Dict[str, Any], items: List[D
             t.textContent = msg;
             c.appendChild(t);
             setTimeout(() => {{ t.remove(); }}, 5000);
+        }}
+
+        function openModal(title, magnet) {{
+            currentActiveMagnet = magnet || '';
+            document.getElementById('modalTitle').textContent = 'Request: ' + title;
+            document.getElementById('modalMagnetText').textContent = magnet || 'No direct magnet URI available.';
+            document.getElementById('fallbackModal').style.display = 'flex';
+        }}
+
+        function closeModal() {{
+            document.getElementById('fallbackModal').style.display = 'none';
+        }}
+
+        function copyMagnetFromModal() {{
+            if (!currentActiveMagnet) {{
+                showToast('No magnet URI available for this release.', 'error');
+                return;
+            }}
+            navigator.clipboard.writeText(currentActiveMagnet);
+            showToast('✓ Magnet link copied to clipboard!', 'success');
         }}
 
         async function requestMedia(btn, imdbId, title, year) {{
@@ -1236,6 +1413,11 @@ def render_dashboard_page(username: str, settings: Dict[str, Any], items: List[D
                     btn.textContent = '✓ Requested';
                     btn.className = 'btn-request btn-success';
                     showToast(data.message, 'success');
+                }} else if (data.unconfigured) {{
+                    btn.disabled = false;
+                    btn.textContent = 'Request';
+                    btn.className = 'btn-request';
+                    openModal(title, data.magnet || magnet);
                 }} else {{
                     btn.textContent = 'Failed';
                     btn.className = 'btn-request btn-failed';
@@ -1581,7 +1763,7 @@ async def api_request(
 ):
     """1-Click request endpoint dispatching to the logged-in user's downloader."""
     settings = user_manager.get_user_settings(username)
-    downloader = get_user_downloader(settings)
+    client_name = (settings.get("download_client") or "radarr").lower()
 
     clean_imdb = (imdb or "").strip()
     if clean_imdb in ("N/A", "None", ""):
@@ -1591,6 +1773,22 @@ async def api_request(
     clean_year = year if year and year > 1900 else None
     clean_magnet = (magnet or "").strip() or None
 
+    # Check if user has actually configured a downloader
+    has_downloader = False
+    if client_name == "radarr":
+        has_downloader = bool(settings.get("radarr_api_key"))
+    elif client_name == "rutorrent":
+        has_downloader = bool(settings.get("rutorrent_url") and settings.get("rutorrent_user"))
+
+    if not has_downloader:
+        return {
+            "success": False,
+            "unconfigured": True,
+            "magnet": clean_magnet or "",
+            "message": "Downloader not configured yet in Settings. Copy the direct magnet URI below to download manually:"
+        }
+
+    downloader = get_user_downloader(settings)
     logger.info(f"User '{username}' requesting: '{clean_title}' ({clean_year}) [IMDb: {clean_imdb}]")
     result: DownloadResult = downloader.add_movie(
         imdb_id=clean_imdb,
@@ -1601,6 +1799,7 @@ async def api_request(
 
     return {
         "success": result.success,
+        "unconfigured": False,
         "message": result.message,
         "client": result.client,
         "title": result.title
