@@ -697,9 +697,6 @@ def generate_html(data: List[Dict[str, Any]], file_path: str):
     # Compute source counts
     tpb_count = sum(1 for x in data if "tpb" in x.get("source_keys", []))
     uindex_count = sum(1 for x in data if "uindex" in x.get("source_keys", []))
-    multi_count = sum(1 for x in data if len(x.get("sources", [])) > 1)
-
-    multi_pill_html = f'<button class="source-pill pill-multi" data-source="multi">Both Sources ({multi_count})</button>' if multi_count > 0 else ''
 
     source_pills_html = f"""
     <div class="source-filter-bar">
@@ -707,7 +704,6 @@ def generate_html(data: List[Dict[str, Any]], file_path: str):
         <button class="source-pill active" data-source="all">All Sources ({len(data)})</button>
         <button class="source-pill pill-tpb" data-source="tpb">Pirate Bay ({tpb_count})</button>
         <button class="source-pill pill-uindex" data-source="uindex">uIndex ({uindex_count})</button>
-        {multi_pill_html}
     </div>
     """
 
@@ -1206,8 +1202,6 @@ def generate_html(data: List[Dict[str, Any]], file_path: str):
                 const rowSources = (r.getAttribute('data-sources') || '').toLowerCase().split(',');
                 if (currentSourceFilter === 'all') {{
                     matchSource = true;
-                }} else if (currentSourceFilter === 'multi') {{
-                    matchSource = (rowSources.length > 1);
                 }} else {{
                     matchSource = rowSources.includes(currentSourceFilter.toLowerCase());
                 }}
