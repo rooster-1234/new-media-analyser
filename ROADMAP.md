@@ -16,6 +16,27 @@ This document outlines the planned milestones, upcoming features, and technical 
 
 ---
 
+## Next Milestone: v0.7.0 (Code Architecture & Frontend Decoupling)
+Refactor `app.py` from inline prototype HTML/CSS strings into standard FastAPI Jinja2 templates and dedicated static assets.
+
+- [ ] **Template Engine Integration (`templates/`)**
+  - [ ] Configure `Jinja2Templates` in `app.py`.
+  - [ ] Create `templates/base.html` for shared layout, navbar, session badges, and brand vector logo.
+  - [ ] Migrate `render_dashboard_page()` to `templates/dashboard.html`.
+  - [ ] Migrate `render_settings_page()` to `templates/settings.html`.
+  - [ ] Migrate `render_login_page()` to `templates/login.html`.
+- [ ] **Static Assets Extraction (`static/`)**
+  - [ ] Mount `/static` route via FastAPI `StaticFiles`.
+  - [ ] Extract inlined CSS into `static/css/theme.css` with browser caching headers.
+  - [ ] Extract client-side JavaScript into `static/js/dashboard.js` and `static/js/settings.js`.
+  - [ ] Move SVG logo to `static/img/logo.svg`.
+- [ ] **Docker & Deployment Updates**
+  - [ ] Update `docker-compose.yml` and `Dockerfile` to mount `./templates` and `./static`.
+  - [ ] Verify test suite passes without regressions.
+  - [ ] Slim `app.py` from ~2,550 lines down to ~350 lines of clean routing and API handlers.
+
+---
+
 ## Phase 1: Web Application & Configuration UI [Completed - v0.5.0]
 
 Transition from standalone CLI scripts and static HTML reports to a unified, self-contained local web application.
@@ -100,6 +121,27 @@ Broaden the release scanning coverage, merge multi-source feeds, and implement r
   - [ ] Submit media requests directly to Overseerr/Jellyseerr for automated approval and workflow routing.
 - [ ] **Sonarr Integration**
   - [ ] Full TV show tracking, season monitoring, and episode matching.
+
+---
+
+## Phase 6: Codebase Architecture & Frontend Decoupling [Planned - v0.7.0]
+
+Decouple `app.py` by separating presentation concerns (HTML templates, CSS stylesheets, client JS) from application and API routing.
+
+- [ ] **Jinja2 Template Integration (`templates/`)**
+  - [ ] Configure `Jinja2Templates` and create shared base layout (`templates/base.html`) for brand header, navbar, and session status.
+  - [ ] Migrate `render_dashboard_page()` to `templates/dashboard.html`.
+  - [ ] Migrate `render_settings_page()` to `templates/settings.html`.
+  - [ ] Migrate `render_login_page()` to `templates/login.html`.
+- [ ] **Static Assets Separation (`static/`)**
+  - [ ] Mount `/static` route via FastAPI `StaticFiles`.
+  - [ ] Extract dark theme styles, animations, and modal rules into `static/css/theme.css`.
+  - [ ] Extract client-side JavaScript into dedicated files (`static/js/dashboard.js`, `static/js/settings.js`).
+  - [ ] Save standalone vector logo to `static/img/logo.svg`.
+- [ ] **Deployment & Maintenance Optimization**
+  - [ ] Update `docker-compose.yml` to mount `./templates` and `./static`.
+  - [ ] Reduce `app.py` from ~2,550 lines down to ~350 lines of clean routing and API handlers.
+  - [ ] Enable browser-side caching for stylesheets and static assets.
 
 ---
 
