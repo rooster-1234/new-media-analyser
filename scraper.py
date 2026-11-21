@@ -30,11 +30,11 @@ SITE_SCAN = os.getenv("SITE_SCAN")
 SITE_SCAN1 = os.getenv("SITE_SCAN1") or SITE_SCAN or "https://thepiratebay.org/search.php?q=top100:48h_207"
 SITE_SCAN2 = os.getenv("SITE_SCAN2") or "https://uindex.org/top.php?c=1&t=7d"
 SITE_SCAN3 = os.getenv("SITE_SCAN3")
-OUTPUT_DIR = os.getenv("OUTPUT_DIR") or os.path.join(os.path.dirname(os.path.abspath(__file__)), "output")
+DATA_DIR = os.getenv("DATA_DIR") or os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
 MAX_SYNOPSIS_WORDS = int(os.getenv("MAX_SYNOPSIS_WORDS", "60"))
 OMDB_API_KEY = os.getenv("OMDB_API_KEY", "").strip()
-IMDB_CACHE_DB = os.path.join(OUTPUT_DIR, "imdb_ratings.db")
-os.makedirs(OUTPUT_DIR, exist_ok=True)
+IMDB_CACHE_DB = os.path.join(DATA_DIR, "imdb_ratings.db")
+os.makedirs(DATA_DIR, exist_ok=True)
 
 # Media filter instance (initialized on demand or during ensure_media_profile)
 media_filter: Optional[MediaFilter] = None
@@ -1374,7 +1374,7 @@ if __name__ == "__main__":
     async def main():
         data = await fetch_media_index()
         sanitized = sanitize_output(data)
-        out_file = os.path.join(OUTPUT_DIR, "media_report.html")
+        out_file = os.path.join(DATA_DIR, "media_report.html")
         generate_html(sanitized, out_file)
 
     asyncio.run(main())

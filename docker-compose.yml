@@ -9,7 +9,6 @@ services:
       - "host.docker.internal:host-gateway"
     volumes:
       - ./data:/app/data
-      - ./output:/app/output
       - ./app.py:/app/app.py
       - ./filter.py:/app/filter.py
       - ./scraper.py:/app/scraper.py

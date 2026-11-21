@@ -28,7 +28,7 @@ RUN playwright install --with-deps chromium
 COPY . .
 
 # Create volume directories
-RUN mkdir -p /app/data /app/output
+RUN mkdir -p /app/data
 
 EXPOSE 8080
 
