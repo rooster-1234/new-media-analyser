@@ -319,19 +319,19 @@ def render_login_page(error: str = "") -> str:
 
         <div class="tab-buttons">
             <button class="tab-btn active" id="tabLogin" onclick="switchTab('login')">Sign In</button>
-            <button class="tab-btn" id="tabRegister" onclick="switchTab('register')">Register New User</button>
+            <button class="tab-btn" id="tabRegister" onclick="switchTab('register')">Register New Account</button>
         </div>
 
         <div class="error-msg" id="errorBox"></div>
 
         <form id="authForm" onsubmit="handleSubmit(event)">
             <div class="form-group">
-                <label for="username">Username</label>
-                <input type="text" id="username" required autocomplete="username" autofocus>
+                <label for="username">Your Email</label>
+                <input type="text" id="username" placeholder="name@example.com" required autocomplete="email" autofocus>
             </div>
             <div class="form-group">
                 <label for="password">Password</label>
-                <input type="password" id="password" required autocomplete="current-password">
+                <input type="password" id="password" placeholder="••••••••" required autocomplete="current-password">
             </div>
             <button type="submit" class="btn-submit" id="submitBtn">Sign In</button>
         </form>
@@ -1780,7 +1780,7 @@ async def api_login(auth: AuthModel, response: Response):
         response = JSONResponse(content={"success": True, "message": "Login successful"})
         response.set_cookie(key="session_token", value=token, max_age=86400 * 30, httponly=True)
         return response
-    return JSONResponse(status_code=401, content={"success": False, "message": "Invalid username or password"})
+    return JSONResponse(status_code=401, content={"success": False, "message": "Invalid email or password"})
 
 
 @app.post("/api/auth/register")

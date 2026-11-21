@@ -67,13 +67,13 @@ def register_user(username: str, password: str) -> tuple[bool, str]:
     """Registers a new user and creates their default profile."""
     username = username.strip().lower()
     if not username or len(username) < 3:
-        return False, "Username must be at least 3 characters."
+        return False, "Please enter a valid email address."
     if not password or len(password) < 4:
         return False, "Password must be at least 4 characters."
 
     users = load_users()
     if username in users:
-        return False, "Username already exists. Please choose another."
+        return False, "An account with this email already exists. Please sign in or use another email."
 
     pwd_hash, salt = hash_password(password)
     users[username] = {
