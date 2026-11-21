@@ -44,6 +44,9 @@ scan_state = {
     "total_items": 0
 }
 
+# In-memory store for active Plex OAuth PIN sessions (pin_id -> MyPlexPinLogin)
+active_plex_pins: Dict[str, Any] = {}
+
 
 def get_current_user(request: Request) -> Optional[str]:
     """Helper to retrieve authenticated username from session cookie."""
@@ -558,14 +561,28 @@ def render_settings_page(username: str, settings: Dict[str, Any]) -> str:
             </div>
 
             <!-- Plex Inputs -->
-            <div id="fields_plex" class="form-grid">
-                <div class="form-group">
-                    <label>Plex Server URL</label>
-                    <input type="text" id="plex_url" value="{html.escape(settings.get('plex_url', ''))}" placeholder="http://192.168.0.2:32400">
+            <div id="fields_plex" style="display: {'block' if (media_server == 'plex' or media_server == 'all') else 'none'};">
+                <div style="background: rgba(229, 160, 13, 0.08); border: 1px solid rgba(229, 160, 13, 0.25); border-radius: 8px; padding: 12px 16px; margin-bottom: 14px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px;">
+                    <div>
+                        <div style="font-weight: 600; color: #fbbf24; font-size: 14px; margin-bottom: 2px;">⚡ 1-Click Plex Authorization</div>
+                        <div style="font-size: 12px; color: #cbd5e1;">Your token does not need to be entered manually. Click below to sign in with your Plex account to create and link your token automatically.</div>
+                    </div>
+                    <button type="button" id="btnPlexOAuth" onclick="startPlexOAuth()" style="background: #e5a00d; color: #000; font-weight: 700; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; display: flex; align-items: center; gap: 8px; font-size: 13px; transition: all 0.15s ease;">
+                        <span>Sign In with Plex</span>
+                    </button>
                 </div>
-                <div class="form-group">
-                    <label>Plex Token (X-Plex-Token)</label>
-                    <input type="text" id="plex_token" value="{html.escape(settings.get('plex_token', ''))}" placeholder="Your Plex Token">
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label>Plex Server URL</label>
+                        <input type="text" id="plex_url" value="{html.escape(settings.get('plex_url', ''))}" placeholder="http://192.168.0.2:32400">
+                    </div>
+                    <div class="form-group">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                            <label style="margin: 0;">Plex Token (X-Plex-Token)</label>
+                            <button type="button" id="btnToggleManualToken" onclick="toggleManualPlexToken()" style="background: transparent; border: none; color: #38bdf8; font-size: 11px; cursor: pointer; text-decoration: underline;">Edit manually</button>
+                        </div>
+                        <input type="text" id="plex_token" value="{html.escape(settings.get('plex_token', ''))}" placeholder="Generated automatically via Sign In with Plex" readonly style="background: #202020; color: #94a3b8; cursor: not-allowed;">
+                    </div>
                 </div>
             </div>
 
@@ -660,6 +677,9 @@ def render_settings_page(username: str, settings: Dict[str, Any]) -> str:
                 <div class="form-group">
                     <label>API Key (v5.2.0+ Bearer Token)</label>
                     <input type="text" id="qbittorrent_api_key" value="{html.escape(settings.get('qbittorrent_api_key', ''))}" placeholder="qbt_...">
+                    <span style="font-size: 11px; color: #94a3b8; margin-top: 5px; display: block; line-height: 1.4;">
+                        🔑 Supported in qBittorrent v5.2.0+. Learn <a href="https://github.com/qbittorrent/qBittorrent/wiki/API-Key-Authentication-(%E2%89%A5v5.2.0)" target="_blank" rel="noopener noreferrer" style="color: #38bdf8; text-decoration: underline;">how to find or create your API Key</a> in the qBittorrent WebUI.
+                    </span>
                 </div>
                 <div class="form-group">
                     <label>WebUI Username (Optional / Fallback)</label>
@@ -743,11 +763,93 @@ def render_settings_page(username: str, settings: Dict[str, Any]) -> str:
     <script>
         function toggleServerFields() {{
             const s = document.getElementById('media_server').value;
-            document.getElementById('fields_plex').style.display = (s === 'plex' || s === 'all') ? 'grid' : 'none';
+            document.getElementById('fields_plex').style.display = (s === 'plex' || s === 'all') ? 'block' : 'none';
             document.getElementById('fields_jellyfin').style.display = (s === 'jellyfin' || s === 'all') ? 'grid' : 'none';
             document.getElementById('fields_emby').style.display = (s === 'emby' || s === 'all') ? 'grid' : 'none';
         }}
         toggleServerFields();
+
+        function toggleManualPlexToken() {{
+            const input = document.getElementById('plex_token');
+            const btn = document.getElementById('btnToggleManualToken');
+            if (input.readOnly) {{
+                input.readOnly = false;
+                input.style.background = '#181818';
+                input.style.color = '#f8fafc';
+                input.style.cursor = 'text';
+                btn.textContent = 'Lock field';
+            }} else {{
+                input.readOnly = true;
+                input.style.background = '#202020';
+                input.style.color = '#94a3b8';
+                input.style.cursor = 'not-allowed';
+                btn.textContent = 'Edit manually';
+            }}
+        }}
+
+        let plexPollInterval = null;
+        async function startPlexOAuth() {{
+            const btn = document.getElementById('btnPlexOAuth');
+            const originalHtml = btn.innerHTML;
+            btn.disabled = true;
+            btn.innerHTML = '<span>Opening Plex...</span>';
+
+            try {{
+                const res = await fetch('/api/plex/oauth/start', {{ method: 'POST' }});
+                const data = await res.json();
+                if (!data.success || !data.oauth_url) {{
+                    alert('Error starting Plex sign-in: ' + (data.message || 'Unknown error'));
+                    btn.disabled = false;
+                    btn.innerHTML = originalHtml;
+                    return;
+                }}
+
+                // Open Plex OAuth window
+                const width = 600, height = 700;
+                const left = (window.innerWidth - width) / 2;
+                const top = (window.innerHeight - height) / 2;
+                const popup = window.open(data.oauth_url, 'PlexSignIn', `width=${{width}},height=${{height}},top=${{top}},left=${{left}}`);
+
+                btn.innerHTML = '<span>Waiting for Plex authorization...</span>';
+
+                if (plexPollInterval) clearInterval(plexPollInterval);
+                let pollAttempts = 0;
+                plexPollInterval = setInterval(async () => {{
+                    pollAttempts++;
+                    if (pollAttempts > 90) {{
+                        clearInterval(plexPollInterval);
+                        btn.disabled = false;
+                        btn.innerHTML = originalHtml;
+                        return;
+                    }}
+                    try {{
+                        const pollRes = await fetch('/api/plex/oauth/poll?pin_id=' + encodeURIComponent(data.pin_id));
+                        const pollData = await pollRes.json();
+                        if (pollData.success && pollData.authenticated && pollData.token) {{
+                            clearInterval(plexPollInterval);
+                            if (popup && !popup.closed) popup.close();
+                            document.getElementById('plex_token').value = pollData.token;
+                            btn.disabled = false;
+                            btn.style.background = '#22c55e';
+                            btn.style.color = '#fff';
+                            btn.innerHTML = '<span>✓ Plex Authorized!</span>';
+                            testMediaServer();
+                            setTimeout(() => {{
+                                btn.style.background = '#e5a00d';
+                                btn.style.color = '#000';
+                                btn.innerHTML = originalHtml;
+                            }}, 5000);
+                        }}
+                    }} catch (err) {{
+                        console.error('Plex poll error:', err);
+                    }}
+                }}, 2000);
+            }} catch (e) {{
+                alert('Connection error starting Plex sign-in.');
+                btn.disabled = false;
+                btn.innerHTML = originalHtml;
+            }}
+        }}
 
         function toggleDownloaderFields() {{
             const d = document.getElementById('download_client').value;
@@ -1831,6 +1933,49 @@ async def api_save_settings(data: SettingsUpdateModel, username: str = Depends(r
     existing.update(updated)
     user_manager.save_user_settings(username, existing)
     return {"success": True, "message": "Settings saved successfully."}
+
+
+@app.post("/api/plex/oauth/start")
+async def api_plex_oauth_start(username: str = Depends(require_user)):
+    """Initiates an official Plex OAuth session for 1-click token creation."""
+    try:
+        from plexapi.myplex import MyPlexPinLogin
+        headers = {
+            "X-Plex-Product": "New Media Analyser",
+            "X-Plex-Version": "1.0",
+            "X-Plex-Device": "Web Browser",
+            "X-Plex-Device-Name": "New Media Analyser",
+        }
+        pin = MyPlexPinLogin(oauth=True, headers=headers)
+        pin._getCode()
+        pin_id = str(pin._id)
+        oauth_url = pin.oauthUrl()
+        active_plex_pins[pin_id] = pin
+        return {"success": True, "pin_id": pin_id, "oauth_url": oauth_url}
+    except Exception as e:
+        logger.error(f"Error starting Plex OAuth session: {e}")
+        return JSONResponse(status_code=500, content={"success": False, "message": str(e)})
+
+
+@app.get("/api/plex/oauth/poll")
+async def api_plex_oauth_poll(pin_id: str, username: str = Depends(require_user)):
+    """Polls Plex to verify if the user authorized the login PIN."""
+    pin = active_plex_pins.get(pin_id)
+    if not pin:
+        return JSONResponse(status_code=404, content={"success": False, "message": "Plex PIN session expired or not found"})
+    try:
+        authenticated = pin._checkLogin()
+        if authenticated and pin.token:
+            token = pin.token
+            del active_plex_pins[pin_id]
+            settings = user_manager.get_user_settings(username)
+            settings["plex_token"] = token
+            user_manager.save_user_settings(username, settings)
+            return {"success": True, "authenticated": True, "token": token}
+        return {"success": True, "authenticated": False}
+    except Exception as e:
+        logger.error(f"Error checking Plex PIN status: {e}")
+        return JSONResponse(status_code=500, content={"success": False, "message": str(e)})
 
 
 @app.post("/api/test/media-server")
