@@ -27,6 +27,9 @@ class TestPlexAndQbitUI(unittest.TestCase):
         self.assertIn("https://github.com/qbittorrent/qBittorrent/wiki/API-Key-Authentication-(%E2%89%A5v5.2.0)", html)
         self.assertIn("how to find or create your API Key", html)
 
+        # Verify Dashboard button styling
+        self.assertIn('href="/dashboard" class="btn btn-primary"', html)
+
     def test_plex_oauth_start_endpoint(self):
         resp = self.client.post("/api/plex/oauth/start", cookies={"session_token": self.token})
         self.assertEqual(resp.status_code, 200)

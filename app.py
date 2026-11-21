@@ -538,8 +538,8 @@ def render_settings_page(username: str, settings: Dict[str, Any]) -> str:
         <h2>New Media Analyser</h2>
         <div class="nav-links">
             <span>👤 Logged in as <strong>{html.escape(username)}</strong></span>
-            <a href="/dashboard">Dashboard</a>
-            <a href="/api/auth/logout" style="color: #f87171;">Logout</a>
+            <a href="/dashboard" class="btn btn-primary" style="text-decoration: none;">📊 Dashboard</a>
+            <a href="/api/auth/logout" class="btn btn-test" style="text-decoration: none; color: #f87171; border-color: rgba(248, 113, 113, 0.3);">Sign Out</a>
         </div>
     </div>
 
@@ -755,7 +755,10 @@ def render_settings_page(username: str, settings: Dict[str, Any]) -> str:
             </div>
         </div>
 
-        <button type="button" class="btn btn-save-all" onclick="saveAllSettings()">💾 Save All Preferences</button>
+        <div style="display: flex; gap: 12px; margin-top: 10px; align-items: center; flex-wrap: wrap;">
+            <button type="button" class="btn btn-save-all" onclick="saveAllSettings()" style="flex: 2; margin: 0; min-width: 220px;">💾 Save All Preferences</button>
+            <a href="/dashboard" class="btn btn-primary" style="flex: 1; padding: 12px 20px; font-size: 15px; text-decoration: none; text-align: center; justify-content: center; min-width: 180px;">📊 Back to Dashboard</a>
+        </div>
     </div>
 
     <div class="toast-box" id="toastBox">Preferences saved successfully!</div>
