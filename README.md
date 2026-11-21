@@ -1,6 +1,20 @@
 # New Media Analyser
 
-An intelligent, self-hosted media release monitor and download dispatcher. It connects to your **Plex, Jellyfin, or Emby** library, learns your favorite genres, automatically detects duplicates, and matches newly released media from multiple sources against your personal taste profile with 1-click downloading.
+An intelligent, self-hosted media release radar and 1-click download dispatcher. It connects to your **Plex, Jellyfin, or Emby** library, learns your favorite genres, automatically detects duplicates, and matches newly released media from multiple sources against your personal taste profile.
+
+---
+
+## 💡 Why I Built This
+
+Media discovery platforms like **Overseerr and Jellyseerr (Seerr)** are great for requesting known movies, but their discovery lists rely on public metadata databases (like TMDb) that often **lag behind real-world release drops**. Days or even weeks can pass before a newly available digital release actually shows up on their radars.
+
+Like many media server owners, I found myself constantly checking "Top 48h" and "New Releases" lists on The Pirate Bay and tracker boards manually—cross-checking whether I already had a title in Plex, verifying IMDb ratings, checking for English audio, and manually copying magnet links.
+
+**New Media Analyser automates that daily ritual**:
+1. **Scouts live tracker feeds** directly the moment releases drop.
+2. **Cross-references your library** (Plex, Jellyfin, or Emby) to instantly filter out movies you already own.
+3. **Applies quality & taste filters** (IMDb score threshold, release year, English audio, and genre weighting).
+4. **Dispatches with 1 click** to **Radarr, qBittorrent, or ruTorrent** (or copies clean magnet URIs if no downloader is configured).
 
 ---
 
