@@ -40,7 +40,7 @@ class TestSourceLinks(unittest.TestCase):
         html = app.render_dashboard_page("testuser", {}, items)
         self.assertIn("PB ↗", html)
         self.assertNotIn("uIndex ↗", html)
-        self.assertIn("https://thepiratebay.org/search.php?q=tt18412256", html)
+        self.assertIn("https://thepiratebay.org/search.php?q=Alien+Romulus", html)
 
     def test_uindex_only_fallback_link(self):
         items = [{
@@ -56,7 +56,23 @@ class TestSourceLinks(unittest.TestCase):
         html = app.render_dashboard_page("testuser", {}, items)
         self.assertIn("uIndex ↗", html)
         self.assertNotIn("PB ↗", html)
-        self.assertIn("https://uindex.org/search.php?search=tt15239678", html)
+        self.assertIn("https://uindex.org/search.php?search=Dune+Part+Two", html)
+
+    def test_stacked_source_badges_and_logo(self):
+        items = [{
+            "title": "Gladiator II (2024)",
+            "clean_title": "Gladiator II",
+            "year": 2024,
+            "imdb_id": "tt2064968",
+            "sources": ["TPB", "uIndex"],
+            "source_keys": ["tpb", "uindex"],
+            "filter_status": "Consider",
+            "genre_match": "High"
+        }]
+        html = app.render_dashboard_page("testuser", {}, items)
+        self.assertIn("flex-direction: column", html)
+        self.assertIn("lensGrad", html)
+        self.assertIn("favicon.svg", html)
 
 if __name__ == "__main__":
     unittest.main()

@@ -230,8 +230,29 @@ class SettingsUpdateModel(BaseModel):
 
 
 # -----------------------------------------------------------------------------
-# Web Page HTML Generators
+# Web Page HTML Generators & Assets
 # -----------------------------------------------------------------------------
+
+def get_logo_svg(size: int = 28) -> str:
+    """Returns Concept 1 'Radar Lens' logo combining search (magnifier) and download (down arrow)."""
+    return f"""<svg width="{size}" height="{size}" viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg" style="vertical-align: middle; flex-shrink: 0;">
+  <defs>
+    <linearGradient id="lensGrad_{size}" x1="20" y1="20" x2="88" y2="88" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#38bdf8"/>
+      <stop offset="100%" stop-color="#2563eb"/>
+    </linearGradient>
+    <linearGradient id="arrowGrad_{size}" x1="52" y1="28" x2="52" y2="76" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#60a5fa"/>
+      <stop offset="100%" stop-color="#38bdf8"/>
+    </linearGradient>
+  </defs>
+  <circle cx="52" cy="52" r="36" stroke="url(#lensGrad_{size})" stroke-width="8" stroke-linecap="round"/>
+  <line x1="78" y1="78" x2="108" y2="108" stroke="url(#lensGrad_{size})" stroke-width="10" stroke-linecap="round"/>
+  <path d="M52 32 V62" stroke="url(#arrowGrad_{size})" stroke-width="7" stroke-linecap="round"/>
+  <path d="M40 52 L52 64 L64 52" stroke="url(#arrowGrad_{size})" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M36 72 H68" stroke="#38bdf8" stroke-width="6" stroke-linecap="round" opacity="0.9"/>
+</svg>"""
+
 
 def render_login_page(error: str = "") -> str:
     return f"""<!DOCTYPE html>
@@ -240,6 +261,7 @@ def render_login_page(error: str = "") -> str:
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>New Media Analyser | Welcome</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
     <style>
         body {{
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
@@ -360,6 +382,9 @@ def render_login_page(error: str = "") -> str:
 <body>
     <div class="auth-card">
         <div class="brand">
+            <div style="display: flex; justify-content: center; margin-bottom: 12px;">
+                {get_logo_svg(52)}
+            </div>
             <h1>New Media Analyser</h1>
             <p>Smart Media Discovery & Download Monitor</p>
         </div>
@@ -453,6 +478,7 @@ def render_settings_page(username: str, settings: Dict[str, Any]) -> str:
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>New Media Analyser | Configuration</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
     <style>
         body {{
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
@@ -616,7 +642,10 @@ def render_settings_page(username: str, settings: Dict[str, Any]) -> str:
 </head>
 <body>
     <div class="navbar">
-        <h2>New Media Analyser</h2>
+        <div style="display: flex; align-items: center; gap: 10px;">
+            {get_logo_svg(28)}
+            <h2 style="margin: 0; font-size: 18px; color: #38bdf8;">New Media Analyser</h2>
+        </div>
         <div class="nav-links">
             <span class="user-pill">👤 <strong>{html.escape(username)}</strong></span>
             <a href="/dashboard" class="btn btn-primary" style="text-decoration: none;">📊 Dashboard</a>
@@ -1131,14 +1160,10 @@ def get_source_url(source_name: str, item: Dict[str, Any]) -> str:
         elif source_name.lower() in ("uindex",):
             return f"https://uindex.org{href if href.startswith('/') else '/' + href}"
 
-    # 2. Fallbacks
+    # 2. Search Fallbacks: Search by media title name
     if source_name in ("TPB", "PB"):
-        if imdb_id and str(imdb_id).startswith("tt"):
-            return f"https://thepiratebay.org/search.php?q={imdb_id}"
         return f"https://thepiratebay.org/search.php?q={urllib.parse.quote_plus(clean_title)}"
     elif source_name.lower() in ("uindex",):
-        if imdb_id and str(imdb_id).startswith("tt"):
-            return f"https://uindex.org/search.php?search={imdb_id}"
         return f"https://uindex.org/search.php?search={urllib.parse.quote_plus(clean_title)}"
 
     return "#"
@@ -1325,6 +1350,7 @@ def render_dashboard_page(username: str, settings: Dict[str, Any], items: List[D
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>New Media Analyser | Dashboard</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
     <style>
         body {{
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
@@ -1608,10 +1634,10 @@ def render_dashboard_page(username: str, settings: Dict[str, Any], items: List[D
         .badge-match-low {{ background: rgba(148, 163, 184, 0.15); color: #94a3b8; border: 1px solid rgba(148, 163, 184, 0.3); }}
 
         .source-badges-container {{
-            display: inline-flex;
-            flex-wrap: wrap;
-            gap: 6px;
-            align-items: center;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            align-items: flex-start;
         }}
         .badge-source-btn {{
             display: inline-flex;
@@ -1805,7 +1831,10 @@ def render_dashboard_page(username: str, settings: Dict[str, Any], items: List[D
 </head>
 <body>
     <div class="navbar">
-        <h2>New Media Analyser</h2>
+        <div style="display: flex; align-items: center; gap: 10px;">
+            {get_logo_svg(28)}
+            <h2 style="margin: 0; font-size: 18px; color: #38bdf8;">New Media Analyser</h2>
+        </div>
         <div class="nav-status-group">
             <span class="user-pill">👤 <strong>{html.escape(username)}</strong></span>
             {server_pill_html}
@@ -2189,6 +2218,13 @@ def render_dashboard_page(username: str, settings: Dict[str, Any], items: List[D
 # -----------------------------------------------------------------------------
 # Web Routes
 # -----------------------------------------------------------------------------
+
+@app.get("/favicon.ico", include_in_schema=False)
+@app.get("/favicon.svg", include_in_schema=False)
+async def favicon():
+    """Serves the dynamic SVG logo as browser favicon."""
+    return Response(content=get_logo_svg(32), media_type="image/svg+xml")
+
 
 @app.get("/", response_class=HTMLResponse)
 async def root(request: Request):
