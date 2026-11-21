@@ -8,10 +8,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Planned
-- Containerisation of the entire application suite using Docker and Docker Compose for Synology NAS / Raspberry Pi 5.
-- Automated periodic background scraping inside the containerized web service.
+- Automated periodic background scraping scheduler inside the containerized web service.
 - Seerr (Overseerr / Jellyseerr) integration for movie and TV media requests.
 - Sonarr integration for automated TV series tracking and downloads.
+
+---
+
+## [0.6.0] - 2026-11-21
+
+### Added
+- **Visual Movie Posters & Hover Zoom Preview**:
+  - Integrated 44×64px movie poster thumbnails directly into the primary media title/synopsis table cell (`.media-cell`).
+  - Added smooth interactive hover zoom preview expanding posters to a high-resolution 160×240px card with drop-shadow and fade animation.
+  - Automatic zero-latency poster sourcing via Cinemeta / Metahub CDN (`images.metahub.space`) with graceful placeholder (`🎬`) fallbacks.
+- **US Release Date Timeframe Filtering**:
+  - Scraper now parses official US release dates directly from Cinemeta/IMDb metadata.
+  - Implemented relative timeframe filtering with quick-filter pills: Last 7 Days (`7d`), Last 30 Days (`30d`), Last 90 Days (`90d`), Last 12 Months (`365d`), Specific Year (`year`), or Any (`all`).
+- **Stacked Dual Source Links (PB & uIndex)**:
+  - Separate, vertically stacked pill buttons (`PB ↗` and `uIndex ↗`) in the Source column, keeping table columns compact.
+  - Smart direct linking: links to the original site detail record (`description.php` / `details.php`) with fallback to live media title keyword search.
+- **Brand Identity & Radar Lens Logo**:
+  - Designed Concept 1 ("The Radar Lens") vector logo combining a search magnifier with an illuminated download arrow.
+  - Integrated logo across navbar, welcome/login header, and dynamic SVG favicon endpoint (`/favicon.svg` and `/favicon.ico`).
+- **Plex 1-Click OAuth PIN & qBittorrent v5.2.0+**:
+  - Built 1-click browser OAuth PIN workflow (`/api/plex/oauth/start` and `/api/plex/oauth/poll`) automatically generating and linking Plex server tokens.
+  - Read-only protection for server tokens in UI with manual override toggle.
+  - Added direct wiki documentation link for qBittorrent v5.2.0+ Bearer API Key authentication.
+- **Live Scan Progress Counter**:
+  - Added real-time items-found counter streaming during live scraping to the "Scan Releases Now" button.
+- **Codebase Organization & Cleanliness**:
+  - Reorganized all unit and integration test suites into a dedicated `testing/` package (`25/25 tests passing`).
+  - Consolidated cache paths to `data/imdb_ratings.db` and removed obsolete legacy `output/` directory.
+
+### Changed
+- Standardized UI theme to true dark black (`#121212`), charcoal surfaces (`#1e1e1e`), and consistent `Sign Out` buttons across all pages.
+- Renamed username input field to "Your Email" across login and registration forms.
+
+### Fixed
+- Fixed duplicate library detection in `filter.py` so existing media server titles always display `Exists` / `In Plex` status even if the exclude filter is unchecked.
+- Fixed uIndex search fallback to query by media title keyword instead of raw IMDb ID.
 
 ---
 

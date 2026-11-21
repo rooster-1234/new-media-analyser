@@ -17,19 +17,32 @@ An intelligent, self-hosted media release monitor and download dispatcher. It co
   - Scrapes **The Pirate Bay** (`SITE_SCAN1`) and **uIndex.org** (`SITE_SCAN2`) concurrently using Playwright with stealth evasions.
   - Direct extraction of magnet URIs, release sizes, and live seeder counts.
   - **Cinemeta Catalog Integration**: Instant, zero-delay IMDb resolution for releases that lack embedded IMDb links.
+- **🖼️ Visual Movie Posters & Hover Zoom**:
+  - 44×64px poster thumbnails integrated directly alongside movie titles and synopses.
+  - Interactive hover zoom expands posters to a high-resolution 160×240px artwork preview with soft drop shadows and animations.
+  - Zero-latency automated CDN resolution via Cinemeta and Metahub (`images.metahub.space`) with fallback placeholders.
+- **📅 US Release Date Timeframe Filtering**:
+  - Parses official US theatrical and streaming release dates.
+  - 1-click filter pills for **Within Last 7 Days**, **Last 30 Days**, **Last 90 Days**, **Last 12 Months**, **Specific Year**, or **Any**.
+- **🔗 Stacked Tracker Detail Links**:
+  - Separate, compact pill buttons for **`PB ↗`** and **`uIndex ↗`** stacked vertically in the Source column.
+  - Smart direct linking to original tracker detail records (`description.php` / `details.php`) with fallback keyword searches.
 - **⚡ Smart Cross-Source Deduplication**:
   - Automatically merges identical releases and multiple resolution tiers (1080p, 720p) across different tracker sources into a single consolidated row.
-  - Color-coded source badges (`TPB`, `uIndex`, and purple `TPB + uIndex` for multi-source releases).
   - 1-click interactive source filter pills (`All Sources`, `Pirate Bay`, `uIndex`, `Both Sources`).
 - **🎯 Intelligent Match & Filter Engine**:
   - **Status Classification**: Automatically categorizes releases into `Consider`, `In Library` (already owned), `Low Score` (below IMDb threshold), `Non-English`, or `Too Old`.
   - **Taste Weighting**: Calculates High / Medium / Low genre match scores based on your server's actual library statistics.
   - **Avoided Genres**: 1-click toggle pills in Settings automatically flag unwanted genres as `Low` match.
-- **🚀 1-Click Media Dispatcher**:
+- **🚀 1-Click Media Dispatcher & Plex OAuth**:
+  - **1-Click Plex OAuth**: Authorize your Plex account via official browser popup with automatic token retrieval and linking.
   - **Radarr v3**: Automatic movie search, quality profile selection, and root folder assignment.
   - **qBittorrent (WebAPI v2)**: Native integration supporting modern v5.2.0+ API Key (Bearer token) authentication and session cookie fallback, with custom category and path mapping.
   - **ruTorrent**: Direct magnet dispatch via HTTP Basic Auth with automatic start handling.
   - **Manual Magnet Fallback**: If a downloader isn't configured, 1-click copies the direct magnet link to clipboard.
+- **🎨 Brand Identity ("Radar Lens")**:
+  - Vector icon combining search discovery (magnifier) with download stream (downward arrow).
+  - Dynamic SVG favicon served directly to browser tabs (`/favicon.svg`).
 - **👋 Zero-Friction Onboarding**: New users land directly on the live dashboard and can explore releases immediately; an onboarding banner gently guides them to Settings when ready.
 
 ---
@@ -174,6 +187,8 @@ To let a friend test the application from outside your local network:
 ├── media_servers.py           # Pluggable media server providers (Plex, Jellyfin, Emby, Combined)
 ├── plex_analyzer.py           # Plex API analyzer & official browser OAuth PIN flow
 ├── retrieve_media.py          # Downloader integration (Radarr v3, qBittorrent WebAPI, ruTorrent)
+├── testing/                   # Automated test suite (unit, integration & web tests)
+├── data/                      # Persistent storage (users, profiles, scraped cache, IMDb SQLite db)
 ├── Dockerfile                 # Container packaging with Playwright & Chromium
 ├── docker-compose.yml         # Compose configuration with persistent data volumes
 ├── setup_service.sh           # Raspberry Pi / Linux automated systemd service installer

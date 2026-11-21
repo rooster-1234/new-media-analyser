@@ -4,11 +4,15 @@ This document outlines the planned milestones, upcoming features, and technical 
 
 ---
 
-## Current Status (v0.5.0)
+## Current Status (v0.6.0)
 - [x] **Unified Web Application (`app.py`)**: Self-contained FastAPI + Uvicorn server running on port 8080.
-- [x] **Flat-File User Authentication (`/login`)**: Login and registration with password hashing (SHA-256 + salt) and cookie sessions.
-- [x] **Web Configuration Page (`/settings`)**: Live connection testing and library syncing for Plex/Jellyfin/Emby, downloader testing for Radarr/ruTorrent, and taste preference sliders.
-- [x] **Personalized Release Dashboard (`/dashboard`)**: **"Scan Releases Now" (GO)** button, multi-source release monitoring, and 1-click download dispatch.
+- [x] **Flat-File User Authentication (`/login`)**: Email-based login and registration with password hashing (SHA-256 + salt) and cookie sessions.
+- [x] **Web Configuration Page (`/settings`)**: Live connection testing and library syncing for Plex/Jellyfin/Emby, Plex 1-click OAuth PIN, downloader testing for Radarr/ruTorrent/qBittorrent, and taste preference sliders.
+- [x] **Personalized Release Dashboard (`/dashboard`)**: **"Scan Releases Now" (GO)** button with live counter, multi-source release monitoring, and 1-click download dispatch.
+- [x] **Visual Movie Posters & Hover Zoom**: 44×64px thumbnails in media cell expanding to 160×240px artwork preview on mouse hover.
+- [x] **Relative Timeframe Filtering**: Filter by Last 7 Days, Last 30 Days, Last 90 Days, Last 12 Months, Specific Year, or Any.
+- [x] **Stacked Dual-Source Links**: Direct site record links to The Pirate Bay (`PB ↗`) and `uIndex ↗` stacked vertically in compact column.
+- [x] **Containerisation & ARM64 Pi 5 Support**: Docker & Docker Compose setup with persistent data volumes running live on Raspberry Pi 5.
 
 ---
 
@@ -34,19 +38,18 @@ Transition from standalone CLI scripts and static HTML reports to a unified, sel
 
 ---
 
-## Phase 2: Containerisation & NAS Deployment
+## Phase 2: Containerisation & Pi 5 / NAS Deployment [Completed - v0.6.0]
 
-Package the entire platform for simple, one-click self-hosting in homelabs and NAS environments.
+Package the entire platform for simple, one-click self-hosting in homelabs, Raspberry Pi 5, and NAS environments.
 
-- [ ] **Docker Packaging**
-  - [ ] Write optimized `Dockerfile` (Python + Playwright / Chromium headless dependencies).
-  - [ ] Write `docker-compose.yml` with persistent volume mappings:
-    - `/config` — For `settings.json`, Plex/downloader credentials, and IMDb cache database.
-    - `/output` — For generated reports and logs.
-- [ ] **NAS Test Deployment**
-  - [ ] Deploy container to local NAS (via Docker / Portainer / Synology Container Manager).
-  - [ ] Verify zero-latency local LAN communication with local Plex server (`http://192.168.0.2:32400`).
-  - [ ] Test end-to-end download flow from NAS container to remote seedbox (ruTorrent).
+- [x] **Docker Packaging**
+  - [x] Optimized multi-arch `Dockerfile` with Python 3.12 and headless Playwright / Chromium dependencies.
+  - [x] `docker-compose.yml` with persistent volume mappings:
+    - `./data:/app/data` — For user accounts, library profiles, scraped cache, and SQLite IMDb ratings.
+    - Hot-mounted source code files for instantaneous updates without image rebuilds.
+- [x] **Raspberry Pi 5 Test Deployment**
+  - [x] Deployed and verified container on Raspberry Pi 5 (`raspberrypi2.local:8080`).
+  - [x] Verified LAN communication with local Plex server and remote downloaders.
 - [ ] **Automated Background Scheduler**
   - [ ] Implement an internal cron/scheduler inside the container to auto-scan for new releases periodically (e.g. every 6, 12, or 24 hours).
 
