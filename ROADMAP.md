@@ -4,35 +4,33 @@ This document outlines the planned milestones, upcoming features, and technical 
 
 ---
 
-## Current Status (v0.4.0)
-- [x] **Plex Library Analyzer**: Complete catalog analysis, genre preference extraction, director tracking, and title indexing.
-- [x] **Plex OAuth PIN Flow**: 1-click browser sign-in and automatic local server discovery (`NAS`).
-- [x] **Multi-Server Provider Engine**: Pluggable providers for **Plex**, **Jellyfin**, and **Emby** (`media_servers.py`) with single-server and combined modes.
-- [x] **Multi-Source Scraping Pipeline**: Concurrent stealth scraping of **The Pirate Bay** (`SITE_SCAN1`) and **uIndex.org** (`SITE_SCAN2`) with fast Cinemeta catalog lookup.
-- [x] **Smart Cross-Source Deduplication**: Merges multi-source entries and multi-resolution releases into a unified candidate list (199 raw releases -> 125 distinct items).
-- [x] **Unified Interactive Dashboard**: Consolidated table layout in `media_report.html` with source badges (`TPB`, `uIndex`, `TPB + uIndex`), 1-click source filter pills, dynamic library badges (`In Plex`/`In Jellyfin`/`In Emby`), and 1-click downloader request buttons.
-- [x] **Match & Filter Engine**: Intelligent preference weighting (High/Medium/Low), duplicate suppression, score & year thresholds.
-- [x] **Media Download Dispatcher**: 
-  - [x] Radarr v3 integration (movie lookup, quality profile selection, root folder discovery).
-  - [x] ruTorrent integration (direct magnet dispatch via HTTP Basic Auth, automatic start handling).
-  - [x] Local 1-click API server bridge (`127.0.0.1:7890`) for report actions.
+## Current Status (v0.5.0)
+- [x] **Unified Web Application (`app.py`)**: Self-contained FastAPI + Uvicorn server running on port 8080.
+- [x] **Flat-File User Authentication (`/login`)**: Login and registration with password hashing (SHA-256 + salt) and cookie sessions.
+- [x] **Web Configuration Page (`/settings`)**: Live connection testing and library syncing for Plex/Jellyfin/Emby, downloader testing for Radarr/ruTorrent, and taste preference sliders.
+- [x] **Personalized Release Dashboard (`/dashboard`)**: **"Scan Releases Now" (GO)** button, multi-source release monitoring, and 1-click download dispatch.
 
 ---
 
-## Phase 1: Web Application & Configuration UI
+## Phase 1: Web Application & Configuration UI [Completed - v0.5.0]
 
 Transition from standalone CLI scripts and static HTML reports to a unified, self-contained local web application.
 
-- [ ] **Unified Web Backend (FastAPI / Flask)**
-  - [ ] Serve the interactive media dashboard directly from a single web port (e.g. `http://localhost:8080`).
-  - [x] Consolidate downloader API routes (`/api/request`, `/api/status`) into a local server bridge (`retrieve_media.py --serve` on `127.0.0.1:7890`).
-- [ ] **Interactive Web Configuration Page (`/settings`)**
-  - [ ] **Media Server Settings**: Dropdown to select media server type (Plex / Jellyfin / Emby), connection test button, and 1-click OAuth login.
-  - [ ] **Downloader Settings**: Form for Radarr, Sonarr, ruTorrent, and Seerr API keys, paths, and connection verification buttons.
-  - [ ] **Filter & Preference Sliders**: Visual controls for minimum IMDb score, release year, English-only toggle, and multi-select tags for disliked genres.
-  - [ ] **Scraper Controls**: Manual "Scan Now" trigger and periodic background schedule settings.
-- [ ] **Configuration Storage**
-  - [ ] Support saving and loading settings from a persistent JSON/YAML config (`/config/settings.json`) with `.env` fallback.
+- [x] **Unified Web Backend (FastAPI / Uvicorn)**
+  - [x] Serve the interactive media dashboard directly from a single web port (`http://localhost:8080`).
+  - [x] Consolidate downloader API routes (`/api/request`, `/api/scan`) into the web server.
+- [x] **Welcome & Authentication (`/login`)**
+  - [x] Flat-file user management (`data/users.json`) with password hashing and session cookies.
+- [x] **Interactive Web Configuration Page (`/settings`)**
+  - [x] **Media Server Settings**: Dropdown to select media server type (Plex / Jellyfin / Emby / Combined) with connection test and library synchronization.
+  - [x] **Downloader Settings**: Inputs for Radarr and ruTorrent with live connectivity verification buttons.
+  - [x] **Filter & Preference Sliders**: Visual controls for minimum IMDb score, release year, English-only toggle, and multi-select tags for disliked genres.
+- [x] **Personalized Dashboard & Live Scanner (`/dashboard`)**
+  - [x] Header status indicators for logged-in user, active server, and active downloader.
+  - [x] **"Scan Releases Now" (GO)** button with live status updates.
+  - [x] 1-Click Request dispatcher routed to the user's configured downloader.
+- [x] **Per-User Configuration Storage**
+  - [x] Persistent JSON config per user in `data/profiles/<username>_settings.json` with `.env` fallback defaults.
 
 ---
 

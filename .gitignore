@@ -19,6 +19,7 @@ __pycache__/
 # Project specific caches & data
 plex_library_profile.json
 output/
+data/
 *.db
 *.tmp
 *.sqlite

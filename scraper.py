@@ -592,6 +592,17 @@ async def fetch_media_index() -> List[Dict[str, Any]]:
     # Step 3: Deduplicate and merge across sources into a unified list
     merged_items = deduplicate_and_merge(enriched_items)
     logger.info(f"Unified into {len(merged_items)} distinct releases after smart deduplication.")
+
+    # Save cache for web app and dashboard
+    try:
+        cache_path = Path("data") / "scraped_releases_cache.json"
+        cache_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(cache_path, "w", encoding="utf-8") as f:
+            json.dump(merged_items, f, indent=2, ensure_ascii=False)
+        logger.info(f"Saved release cache to {cache_path}")
+    except Exception as e:
+        logger.debug(f"Could not save release cache: {e}")
+
     return merged_items
 
 

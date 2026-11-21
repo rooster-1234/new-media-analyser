@@ -8,13 +8,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Planned
-- Web Configuration GUI (/settings) for managing media server providers, scrapers, and downloader credentials.
-- Containerisation of the entire application suite using Docker and Docker Compose.
+- Containerisation of the entire application suite using Docker and Docker Compose for Synology NAS / Raspberry Pi 5.
 - Automated periodic background scraping inside the containerized web service.
 - Seerr (Overseerr / Jellyseerr) integration for movie and TV media requests.
 - Sonarr integration for automated TV series tracking and downloads.
 
 ---
+
+## [0.5.0] - 2026-11-21
+
+### Added
+- **Unified Web Application (`app.py`)**:
+  - Built with FastAPI and Uvicorn, serving the entire application from a single port (`8080`) with zero external web server dependencies.
+  - **Welcome & Auth (`/login`)**: Secure flat-file user registration and login stored in `data/users.json` with cryptographic password hashing (SHA-256 + salt) and HTTP-only cookie sessions.
+  - **Interactive Configuration Page (`/settings`)**:
+    - Media server connection management (Plex, Jellyfin, Emby, Combined) with live "Test Connection & Sync" verification button.
+    - Downloader client configuration (Radarr, ruTorrent) with live "Test Downloader" verification button.
+    - Interactive sliders and toggles for minimum IMDb score, target release year, English requirement, and disliked genre tags.
+  - **Personalized Dashboard (`/dashboard`)**:
+    - Header displaying logged-in user, active server status, and active downloader status.
+    - Prominent **"Scan Releases Now" (GO)** button that triggers live multi-source scraping and deduplication with live progress notifications.
+    - Dynamically evaluates and filters releases against each individual user's own library profile and preferences.
+    - Integrated 1-click **Request** button routing downloads directly to the active user's configured client.
 
 ## [0.4.0] - 2026-11-21
 
