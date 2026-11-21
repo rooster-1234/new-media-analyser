@@ -591,6 +591,260 @@ class RuTorrentDownloader(BaseDownloader):
         )
 
 
+class QBittorrentDownloader(BaseDownloader):
+    """
+    qBittorrent WebAPI implementation for managing torrent downloads.
+    Docs: https://github.com/qbittorrent/qBittorrent/wiki/WebUI-API-(qBittorrent-4.1)
+
+    Supports:
+    1. Stateless API Key authentication (Authorization: Bearer <key>) for qBittorrent v5.2.0+.
+    2. Session cookie authentication (/api/v2/auth/login with username & password).
+    3. Reverse proxy HTTP Basic Auth (for seedbox reverse proxies like PulsedMedia or Authelia/Nginx).
+    """
+    name: str = "qbittorrent"
+
+    def __init__(
+        self,
+        url: Optional[str] = None,
+        api_key: Optional[str] = None,
+        username: Optional[str] = None,
+        password: Optional[str] = None,
+        proxy_user: Optional[str] = None,
+        proxy_password: Optional[str] = None,
+        save_path: Optional[str] = None,
+        category: Optional[str] = None,
+        tags: Optional[str] = None,
+        start_now: Optional[bool] = None,
+    ):
+        self.url = (url or os.getenv("QBITTORRENT_URL") or "http://localhost:8080").rstrip("/")
+        self.api_key = (api_key or os.getenv("QBITTORRENT_API_KEY") or "").strip()
+        self.username = (username or os.getenv("QBITTORRENT_USER") or "").strip()
+        self.password = (password or os.getenv("QBITTORRENT_PASSWORD") or "").strip()
+        self.proxy_user = (proxy_user or os.getenv("QBITTORRENT_PROXY_USER") or os.getenv("RUTORRENT_USER") or "").strip()
+        self.proxy_password = (proxy_password or os.getenv("QBITTORRENT_PROXY_PASSWORD") or os.getenv("RUTORRENT_PASSWORD") or "").strip()
+        self.save_path = (save_path or os.getenv("QBITTORRENT_SAVE_PATH") or "").strip()
+        self.category = (category or os.getenv("QBITTORRENT_CATEGORY") or "movies").strip()
+        self.tags = (tags or os.getenv("QBITTORRENT_TAGS") or "NewMediaAnalyser").strip()
+        start_now_env = os.getenv("QBITTORRENT_START_NOW", "true").lower() in ("true", "1", "yes")
+        self.start_now = start_now if start_now is not None else start_now_env
+        self._session: Optional[requests.Session] = None
+
+    def _get_session(self) -> requests.Session:
+        if self._session is None:
+            self._session = requests.Session()
+            # If reverse-proxy basic auth is configured
+            if self.proxy_user and self.proxy_password:
+                self._session.auth = requests.auth.HTTPBasicAuth(self.proxy_user, self.proxy_password)
+            # If modern API key (v5.2.0+) is configured
+            if self.api_key:
+                self._session.headers["Authorization"] = f"Bearer {self.api_key}"
+        return self._session
+
+    def _ensure_authenticated(self, session: requests.Session) -> Tuple[bool, str]:
+        """Performs session login if using username & password rather than API key."""
+        if self.api_key:
+            return True, "Using API key"
+
+        if not self.username and not self.password:
+            return True, "No credentials specified (anonymous/local)"
+
+        try:
+            login_url = f"{self.url}/api/v2/auth/login"
+            resp = session.post(
+                login_url,
+                data={"username": self.username, "password": self.password},
+                headers={"Referer": f"{self.url}/"},
+                timeout=10,
+            )
+            if resp.status_code == 200 and resp.text.strip() == "Ok." or "SID" in session.cookies:
+                return True, "Logged in successfully"
+            elif resp.status_code == 403 and "banned" in resp.text.lower():
+                return False, f"qBittorrent IP banned on {self.url}: {resp.text}"
+            elif resp.status_code == 401 or resp.text.strip() == "Fails.":
+                return False, "qBittorrent WebUI login failed: Invalid username or password."
+            return False, f"qBittorrent login returned HTTP {resp.status_code}: {resp.text[:150]}"
+        except Exception as e:
+            return False, f"Failed to authenticate with qBittorrent: {str(e)}"
+
+    def test_connection(self) -> Tuple[bool, str]:
+        if not self.url:
+            return False, "qBittorrent URL is not configured."
+
+        session = self._get_session()
+
+        # If username/password provided without API key, authenticate first
+        if self.username or self.password:
+            if not self.api_key:
+                ok, auth_err = self._ensure_authenticated(session)
+                if not ok:
+                    return False, auth_err
+
+        try:
+            ver_url = f"{self.url}/api/v2/app/version"
+            resp = session.get(ver_url, timeout=10)
+            if resp.status_code == 200:
+                version = resp.text.strip()
+                webapi_str = ""
+                try:
+                    w_resp = session.get(f"{self.url}/api/v2/app/webapiVersion", timeout=5)
+                    if w_resp.status_code == 200:
+                        webapi_str = f" (WebAPI {w_resp.text.strip()})"
+                except Exception:
+                    pass
+                auth_mode = "API Key" if self.api_key else (f"User: {self.username}" if self.username else "No Auth")
+                return True, f"Successfully connected to qBittorrent {version}{webapi_str} at {self.url} [{auth_mode}]"
+            elif resp.status_code == 401:
+                if "basic realm" in resp.headers.get("www-authenticate", "").lower():
+                    return False, f"Reverse proxy rejected request at {self.url} (HTTP 401). Set reverse proxy username & password."
+                return False, "qBittorrent authentication failed (HTTP 401). Verify your API Key or credentials."
+            elif resp.status_code == 403:
+                return False, f"qBittorrent rejected connection (HTTP 403 Forbidden): {resp.text[:200]}"
+            else:
+                return False, f"qBittorrent responded with HTTP {resp.status_code}: {resp.text[:200]}"
+        except requests.exceptions.ConnectionError:
+            return False, f"Cannot connect to qBittorrent at {self.url}. Ensure the service is running and URL is reachable."
+        except Exception as e:
+            return False, f"Connection error: {str(e)}"
+
+    def lookup_magnet(self, imdb_id: Optional[str] = None, title: Optional[str] = None) -> Optional[str]:
+        """Auto-search indexer for magnet link if not provided directly."""
+        query = imdb_id or title
+        if not query:
+            return None
+        url = f"https://apibay.org/q.php?q={quote(query)}"
+        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+        try:
+            with urllib.request.urlopen(req, timeout=5) as resp:
+                data = json.loads(resp.read().decode())
+                if isinstance(data, list) and data:
+                    valid = [t for t in data if t.get("id") != "0" and t.get("info_hash")]
+                    if valid:
+                        best = max(valid, key=lambda x: int(x.get("seeders", 0)))
+                        hash_val = best["info_hash"]
+                        name = best.get("name", "release")
+                        trackers = "&tr=udp%3A%2F%2Ftracker.coppersurfer.tk%3A6969%2Fannounce&tr=udp%3A%2F%2Ftracker.openbittorrent.com%3A6969%2Fannounce"
+                        return f"magnet:?xt=urn:btih:{hash_val}&dn={quote(name)}{trackers}"
+        except Exception as e:
+            logger.warning(f"Failed to lookup magnet for '{query}': {e}")
+        return None
+
+    def add_torrent(
+        self,
+        torrent_url_or_magnet: str,
+        title: Optional[str] = None,
+        category: Optional[str] = None,
+        save_path: Optional[str] = None,
+        tags: Optional[str] = None,
+        start_now: bool = True,
+    ) -> DownloadResult:
+        if not self.url:
+            return DownloadResult(
+                success=False,
+                client=self.name,
+                title=title or "Unknown",
+                message="qBittorrent URL is not configured.",
+            )
+
+        session = self._get_session()
+        ok, auth_err = self._ensure_authenticated(session)
+        if not ok:
+            return DownloadResult(
+                success=False,
+                client=self.name,
+                title=title or "Unknown",
+                message=auth_err,
+            )
+
+        add_url = f"{self.url}/api/v2/torrents/add"
+        payload = {
+            "urls": torrent_url_or_magnet,
+            "category": category or self.category or "movies",
+            "tags": tags or self.tags or "NewMediaAnalyser",
+            "autoTMM": "false",
+            "paused": "false" if start_now else "true",
+        }
+        target_save = save_path or self.save_path
+        if target_save:
+            payload["savepath"] = target_save
+
+        try:
+            resp = session.post(add_url, data=payload, timeout=15)
+            if resp.status_code == 200:
+                resp_text = resp.text.strip()
+                if "Fails." in resp_text:
+                    return DownloadResult(
+                        success=False,
+                        client=self.name,
+                        title=title or "Unknown",
+                        message="qBittorrent rejected adding the torrent ('Fails.').",
+                    )
+                return DownloadResult(
+                    success=True,
+                    client=self.name,
+                    title=title or "Torrent",
+                    message=f"Successfully sent download to qBittorrent ({title or 'Torrent'}).",
+                    details={"category": payload.get("category"), "paused": payload.get("paused")},
+                )
+            else:
+                return DownloadResult(
+                    success=False,
+                    client=self.name,
+                    title=title or "Unknown",
+                    message=f"qBittorrent error HTTP {resp.status_code}: {resp.text[:200]}",
+                )
+        except Exception as e:
+            return DownloadResult(
+                success=False,
+                client=self.name,
+                title=title or "Unknown",
+                message=f"Failed to submit torrent to qBittorrent: {str(e)}",
+            )
+
+    def add_movie(self, *args, **kwargs) -> DownloadResult:
+        magnet = kwargs.get("magnet") or kwargs.get("url")
+        title = kwargs.get("title") or kwargs.get("imdb_id") or "Movie"
+        if not magnet:
+            logger.info(f"qBittorrent: Looking up magnet for '{title}'...")
+            magnet = self.lookup_magnet(imdb_id=kwargs.get("imdb_id"), title=kwargs.get("title"))
+
+        if magnet:
+            return self.add_torrent(
+                magnet,
+                title=title,
+                category=kwargs.get("category") or self.category,
+                save_path=kwargs.get("save_path") or self.save_path,
+                start_now=self.start_now,
+            )
+        return DownloadResult(
+            success=False,
+            client=self.name,
+            title=title,
+            message=f"Could not find a torrent magnet link for '{title}'.",
+        )
+
+    def add_tv(self, *args, **kwargs) -> DownloadResult:
+        magnet = kwargs.get("magnet") or kwargs.get("url")
+        title = kwargs.get("title") or kwargs.get("imdb_id") or "Series"
+        if not magnet:
+            logger.info(f"qBittorrent: Looking up magnet for '{title}'...")
+            magnet = self.lookup_magnet(imdb_id=kwargs.get("imdb_id"), title=kwargs.get("title"))
+
+        if magnet:
+            return self.add_torrent(
+                magnet,
+                title=title,
+                category="tv",
+                save_path=kwargs.get("save_path") or self.save_path,
+                start_now=self.start_now,
+            )
+        return DownloadResult(
+            success=False,
+            client=self.name,
+            title=title,
+            message=f"Could not find a torrent magnet link for '{title}'.",
+        )
+
+
 # Available client registry
 CLIENT_REGISTRY = {
     "radarr": RadarrDownloader,
@@ -599,6 +853,8 @@ CLIENT_REGISTRY = {
     "jellyseerr": SeerrDownloader,
     "sonarr": SonarrDownloader,
     "rutorrent": RuTorrentDownloader,
+    "qbittorrent": QBittorrentDownloader,
+    "qbit": QBittorrentDownloader,
 }
 
 
@@ -617,6 +873,8 @@ def get_downloader(client_name: Optional[str] = None) -> BaseDownloader:
         # Auto-detect based on configured keys
         if os.getenv("RADARR_API_KEY"):
             client_name = "radarr"
+        elif os.getenv("QBITTORRENT_API_KEY") or os.getenv("QBITTORRENT_URL"):
+            client_name = "qbittorrent"
         elif os.getenv("SEERR_API_KEY"):
             client_name = "seerr"
         elif os.getenv("SONARR_API_KEY"):

@@ -23,7 +23,7 @@ from pydantic import BaseModel
 import user_manager
 from filter import MediaFilter, parse_release_title_and_year, normalize_title
 from media_servers import PlexServerProvider, JellyfinServerProvider, EmbyServerProvider, CombinedServerProvider
-from retrieve_media import RadarrDownloader, RuTorrentDownloader, DownloadResult
+from retrieve_media import RadarrDownloader, RuTorrentDownloader, QBittorrentDownloader, DownloadResult
 import scraper
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
@@ -118,6 +118,18 @@ def get_user_downloader(settings: Dict[str, Any]):
             password=settings.get("rutorrent_password"),
             start_now=settings.get("rutorrent_start_now", True),
         )
+    elif client_name in ("qbittorrent", "qbit"):
+        return QBittorrentDownloader(
+            url=settings.get("qbittorrent_url"),
+            api_key=settings.get("qbittorrent_api_key"),
+            username=settings.get("qbittorrent_user"),
+            password=settings.get("qbittorrent_password"),
+            proxy_user=settings.get("qbittorrent_proxy_user"),
+            proxy_password=settings.get("qbittorrent_proxy_password"),
+            save_path=settings.get("qbittorrent_save_path"),
+            category=settings.get("qbittorrent_category", "movies"),
+            start_now=settings.get("qbittorrent_start_now", True),
+        )
     return RadarrDownloader(url=settings.get("radarr_url"), api_key=settings.get("radarr_api_key"))
 
 
@@ -148,6 +160,15 @@ class SettingsUpdateModel(BaseModel):
     rutorrent_user: Optional[str] = ""
     rutorrent_password: Optional[str] = ""
     rutorrent_start_now: Optional[bool] = True
+    qbittorrent_url: Optional[str] = "http://localhost:8080"
+    qbittorrent_api_key: Optional[str] = ""
+    qbittorrent_user: Optional[str] = ""
+    qbittorrent_password: Optional[str] = ""
+    qbittorrent_proxy_user: Optional[str] = ""
+    qbittorrent_proxy_password: Optional[str] = ""
+    qbittorrent_save_path: Optional[str] = ""
+    qbittorrent_category: Optional[str] = "movies"
+    qbittorrent_start_now: Optional[bool] = True
     site_scan1: Optional[str] = ""
     site_scan2: Optional[str] = ""
     site_scan3: Optional[str] = ""
@@ -584,6 +605,7 @@ def render_settings_page(username: str, settings: Dict[str, Any]) -> str:
                 <select id="download_client" onchange="toggleDownloaderFields()">
                     <option value="radarr" {'selected' if download_client == 'radarr' else ''}>Radarr (Movies)</option>
                     <option value="rutorrent" {'selected' if download_client == 'rutorrent' else ''}>ruTorrent (Direct Client)</option>
+                    <option value="qbittorrent" {'selected' if download_client == 'qbittorrent' else ''}>qBittorrent (WebAPI v2)</option>
                 </select>
             </div>
 
@@ -624,6 +646,46 @@ def render_settings_page(username: str, settings: Dict[str, Any]) -> str:
                 <div class="form-group" style="display: flex; align-items: center; gap: 8px; margin-top: 24px;">
                     <input type="checkbox" id="rutorrent_start_now" {'checked' if settings.get('rutorrent_start_now', True) else ''}>
                     <label for="rutorrent_start_now" style="margin: 0; cursor: pointer;">Auto-start torrents on add</label>
+                </div>
+            </div>
+
+            <!-- qBittorrent Inputs -->
+            <div id="fields_qbittorrent" class="form-grid">
+                <div class="form-group">
+                    <label>qBittorrent Web URL</label>
+                    <input type="text" id="qbittorrent_url" value="{html.escape(settings.get('qbittorrent_url', ''))}" placeholder="http://localhost:8080">
+                </div>
+                <div class="form-group">
+                    <label>API Key (v5.2.0+ Bearer Token)</label>
+                    <input type="text" id="qbittorrent_api_key" value="{html.escape(settings.get('qbittorrent_api_key', ''))}" placeholder="qbt_...">
+                </div>
+                <div class="form-group">
+                    <label>WebUI Username (Optional / Fallback)</label>
+                    <input type="text" id="qbittorrent_user" value="{html.escape(settings.get('qbittorrent_user', ''))}" placeholder="rooster">
+                </div>
+                <div class="form-group">
+                    <label>WebUI Password (Optional / Fallback)</label>
+                    <input type="password" id="qbittorrent_password" value="{html.escape(settings.get('qbittorrent_password', ''))}">
+                </div>
+                <div class="form-group">
+                    <label>Reverse Proxy User (e.g. Seedbox Basic Auth)</label>
+                    <input type="text" id="qbittorrent_proxy_user" value="{html.escape(settings.get('qbittorrent_proxy_user', ''))}" placeholder="Leave blank if direct">
+                </div>
+                <div class="form-group">
+                    <label>Reverse Proxy Password</label>
+                    <input type="password" id="qbittorrent_proxy_password" value="{html.escape(settings.get('qbittorrent_proxy_password', ''))}">
+                </div>
+                <div class="form-group">
+                    <label>Target Category</label>
+                    <input type="text" id="qbittorrent_category" value="{html.escape(settings.get('qbittorrent_category', 'movies'))}" placeholder="movies">
+                </div>
+                <div class="form-group">
+                    <label>Custom Save Path (Optional)</label>
+                    <input type="text" id="qbittorrent_save_path" value="{html.escape(settings.get('qbittorrent_save_path', ''))}" placeholder="Default save path if empty">
+                </div>
+                <div class="form-group" style="display: flex; align-items: center; gap: 8px; margin-top: 24px;">
+                    <input type="checkbox" id="qbittorrent_start_now" {'checked' if settings.get('qbittorrent_start_now', True) else ''}>
+                    <label for="qbittorrent_start_now" style="margin: 0; cursor: pointer;">Auto-start torrents on add</label>
                 </div>
             </div>
 
@@ -682,6 +744,7 @@ def render_settings_page(username: str, settings: Dict[str, Any]) -> str:
             const d = document.getElementById('download_client').value;
             document.getElementById('fields_radarr').style.display = (d === 'radarr') ? 'grid' : 'none';
             document.getElementById('fields_rutorrent').style.display = (d === 'rutorrent') ? 'grid' : 'none';
+            document.getElementById('fields_qbittorrent').style.display = (d === 'qbittorrent' || d === 'qbit') ? 'grid' : 'none';
         }}
         toggleDownloaderFields();
 
@@ -745,6 +808,12 @@ def render_settings_page(username: str, settings: Dict[str, Any]) -> str:
                 rutorrent_url: document.getElementById('rutorrent_url').value,
                 rutorrent_user: document.getElementById('rutorrent_user').value,
                 rutorrent_password: document.getElementById('rutorrent_password').value,
+                qbittorrent_url: document.getElementById('qbittorrent_url').value,
+                qbittorrent_api_key: document.getElementById('qbittorrent_api_key').value,
+                qbittorrent_user: document.getElementById('qbittorrent_user').value,
+                qbittorrent_password: document.getElementById('qbittorrent_password').value,
+                qbittorrent_proxy_user: document.getElementById('qbittorrent_proxy_user').value,
+                qbittorrent_proxy_password: document.getElementById('qbittorrent_proxy_password').value,
             }};
 
             try {{
@@ -785,6 +854,15 @@ def render_settings_page(username: str, settings: Dict[str, Any]) -> str:
                 rutorrent_user: document.getElementById('rutorrent_user').value,
                 rutorrent_password: document.getElementById('rutorrent_password').value,
                 rutorrent_start_now: document.getElementById('rutorrent_start_now').checked,
+                qbittorrent_url: document.getElementById('qbittorrent_url').value,
+                qbittorrent_api_key: document.getElementById('qbittorrent_api_key').value,
+                qbittorrent_user: document.getElementById('qbittorrent_user').value,
+                qbittorrent_password: document.getElementById('qbittorrent_password').value,
+                qbittorrent_proxy_user: document.getElementById('qbittorrent_proxy_user').value,
+                qbittorrent_proxy_password: document.getElementById('qbittorrent_proxy_password').value,
+                qbittorrent_category: document.getElementById('qbittorrent_category').value,
+                qbittorrent_save_path: document.getElementById('qbittorrent_save_path').value,
+                qbittorrent_start_now: document.getElementById('qbittorrent_start_now').checked,
                 filter_min_imdb_score: parseFloat(document.getElementById('filter_min_imdb_score').value) || 5.0,
                 filter_target_year: parseInt(document.getElementById('filter_target_year').value) || 2026,
                 filter_exclude_existing: document.getElementById('filter_exclude_existing').checked,
@@ -820,7 +898,8 @@ def render_dashboard_page(username: str, settings: Dict[str, Any], items: List[D
     downloader_raw = settings.get("download_client", "radarr")
     downloader_name = {
         "radarr": "Radarr",
-        "rutorrent": "ruTorrent"
+        "rutorrent": "ruTorrent",
+        "qbittorrent": "qBittorrent"
     }.get(downloader_raw.lower(), downloader_raw.capitalize())
 
     server_raw = settings.get("media_server", "plex")
@@ -832,7 +911,11 @@ def render_dashboard_page(username: str, settings: Dict[str, Any], items: List[D
     }.get(server_raw.lower(), server_raw.capitalize())
 
     has_server = bool(settings.get("plex_token") or settings.get("jellyfin_key") or settings.get("emby_key"))
-    has_downloader = bool(settings.get("radarr_api_key") or (settings.get("rutorrent_url") and settings.get("rutorrent_user")))
+    has_downloader = bool(
+        settings.get("radarr_api_key")
+        or (settings.get("rutorrent_url") and (settings.get("rutorrent_user") or settings.get("rutorrent_password")))
+        or (settings.get("qbittorrent_url") and (settings.get("qbittorrent_api_key") or settings.get("qbittorrent_user")))
+    )
 
     if has_server:
         server_pill_html = f'<span class="user-pill pill-online">Server: <strong>{html.escape(server_name)}</strong></span>'
@@ -842,7 +925,7 @@ def render_dashboard_page(username: str, settings: Dict[str, Any], items: List[D
     if has_downloader:
         downloader_pill_html = f'<span class="user-pill pill-online">Downloader: <strong>{html.escape(downloader_name)}</strong></span>'
     else:
-        downloader_pill_html = '<a href="/settings" class="user-pill pill-warning" title="Configure Radarr or ruTorrent in Settings">Downloader: ⚠️ Not Configured (Setup →)</a>'
+        downloader_pill_html = '<a href="/settings" class="user-pill pill-warning" title="Configure Radarr, ruTorrent, or qBittorrent in Settings">Downloader: ⚠️ Not Configured (Setup →)</a>'
 
     onboarding_banner_html = ""
     if not has_server:

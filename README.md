@@ -27,6 +27,7 @@ An intelligent, self-hosted media release monitor and download dispatcher. It co
   - **Avoided Genres**: 1-click toggle pills in Settings automatically flag unwanted genres as `Low` match.
 - **🚀 1-Click Media Dispatcher**:
   - **Radarr v3**: Automatic movie search, quality profile selection, and root folder assignment.
+  - **qBittorrent (WebAPI v2)**: Native integration supporting modern v5.2.0+ API Key (Bearer token) authentication and session cookie fallback, with custom category and path mapping.
   - **ruTorrent**: Direct magnet dispatch via HTTP Basic Auth with automatic start handling.
   - **Manual Magnet Fallback**: If a downloader isn't configured, 1-click copies the direct magnet link to clipboard.
 - **👋 Zero-Friction Onboarding**: New users land directly on the live dashboard and can explore releases immediately; an onboarding banner gently guides them to Settings when ready.
@@ -171,7 +172,7 @@ To let a friend test the application from outside your local network:
 ├── filter.py                  # MediaFilter: score, year, language, and taste profile matcher
 ├── media_servers.py           # Pluggable media server providers (Plex, Jellyfin, Emby, Combined)
 ├── plex_analyzer.py           # Plex API analyzer & official browser OAuth PIN flow
-├── retrieve_media.py          # Downloader integration (Radarr v3, ruTorrent)
+├── retrieve_media.py          # Downloader integration (Radarr v3, qBittorrent WebAPI, ruTorrent)
 ├── Dockerfile                 # Container packaging with Playwright & Chromium
 ├── docker-compose.yml         # Compose configuration with persistent data volumes
 ├── setup_service.sh           # Raspberry Pi / Linux automated systemd service installer

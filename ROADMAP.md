@@ -88,6 +88,11 @@ Broaden the release scanning coverage, merge multi-source feeds, and implement r
 
 ## Phase 5: Additional Downloader Clients
 
+- [x] **qBittorrent (WebAPI v2)** [Completed - v0.5.1]
+  - [x] Stateless API Key (Bearer token) support for qBittorrent v5.2.0+.
+  - [x] Cookie-based session authentication fallback (`/api/v2/auth/login`).
+  - [x] Reverse proxy HTTP Basic Auth support (for password-protected seedbox routes like PulsedMedia).
+  - [x] Category and custom download path mapping with auto-start controls.
 - [ ] **Seerr (Overseerr / Jellyseerr)**
   - [ ] Submit media requests directly to Overseerr/Jellyseerr for automated approval and workflow routing.
 - [ ] **Sonarr Integration**
