@@ -298,8 +298,10 @@ async def fetch_imdb_metadata(imdb_id: str) -> Dict[str, Any]:
                         score = dataset_score
                         logger.info(f"Retrieved IMDb score {score} for {imdb_id} via official IMDb dataset cache")
 
-                # Fallback 2: Query OMDb API if score or release date is still missing and API key is set
-                if (score == "N/A" or not release_date) and OMDB_API_KEY:
+                poster = meta.get("poster") or meta.get("poster_path") or ""
+
+                # Fallback 2: Query OMDb API if score, release date, or poster is still missing and API key is set
+                if (score == "N/A" or not release_date or not poster) and OMDB_API_KEY:
                     try:
                         omdb_url = f"https://www.omdbapi.com/?i={imdb_id}&apikey={OMDB_API_KEY}"
                         def _get_omdb():
@@ -317,8 +319,13 @@ async def fetch_imdb_metadata(imdb_id: str) -> Dict[str, Any]:
                                 release_date = parsed_d.isoformat()
                             except Exception:
                                 pass
+                        if not poster and omdb_data.get("Poster") and omdb_data.get("Poster") != "N/A":
+                            poster = omdb_data["Poster"]
                     except Exception as omdb_err:
                         logger.debug(f"OMDb fallback failed for {imdb_id}: {omdb_err}")
+
+                if not poster and imdb_id and imdb_id.startswith("tt"):
+                    poster = f"https://images.metahub.space/poster/small/{imdb_id}/img"
 
                 res = {
                     "score": score,
@@ -327,7 +334,8 @@ async def fetch_imdb_metadata(imdb_id: str) -> Dict[str, Any]:
                     "language": language,
                     "country": country,
                     "release_date": release_date,
-                    "year": meta_year
+                    "year": meta_year,
+                    "poster": poster
                 }
                 logger.info(f"Retrieved Cinemeta metadata for {imdb_id}: score={score}, genres={genres}, rel_date={release_date}")
                 imdb_cache[imdb_id] = res
@@ -335,7 +343,8 @@ async def fetch_imdb_metadata(imdb_id: str) -> Dict[str, Any]:
         except Exception as e:
             logger.debug(f"Cinemeta lookup failed for {imdb_id} ({media_type}): {e}")
 
-    fallback = {"score": "N/A", "genres": [], "synopsis": "", "language": None, "country": None, "release_date": None, "year": None}
+    fallback_poster = f"https://images.metahub.space/poster/small/{imdb_id}/img" if imdb_id and imdb_id.startswith("tt") else ""
+    fallback = {"score": "N/A", "genres": [], "synopsis": "", "language": None, "country": None, "release_date": None, "year": None, "poster": fallback_poster}
     imdb_cache[imdb_id] = fallback
     return fallback
 
@@ -467,6 +476,7 @@ async def enrich_and_filter_item(item: Dict[str, Any], page=None) -> Dict[str, A
     country = None
     release_date = None
     meta_year = None
+    poster = ""
 
     if imdb_id:
         meta = await fetch_imdb_metadata(imdb_id)
@@ -477,6 +487,10 @@ async def enrich_and_filter_item(item: Dict[str, Any], page=None) -> Dict[str, A
         country = meta.get("country")
         release_date = meta.get("release_date")
         meta_year = meta.get("year")
+        poster = meta.get("poster") or ""
+
+    if not poster and imdb_id and imdb_id.startswith("tt"):
+        poster = f"https://images.metahub.space/poster/small/{imdb_id}/img"
 
     item["imdb_id"] = imdb_id
     item["imdb_url"] = f"https://www.imdb.com/title/{imdb_id}" if imdb_id else "N/A"
@@ -486,6 +500,7 @@ async def enrich_and_filter_item(item: Dict[str, Any], page=None) -> Dict[str, A
     item["language"] = language
     item["country"] = country
     item["release_date"] = release_date
+    item["poster"] = poster
     if meta_year and not item.get("year"):
         item["year"] = meta_year
 
@@ -573,6 +588,8 @@ def deduplicate_and_merge(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
                 existing["genres"] = item["genres"]
             if not existing.get("synopsis") and item.get("synopsis"):
                 existing["synopsis"] = item["synopsis"]
+            if not existing.get("poster") and item.get("poster"):
+                existing["poster"] = item["poster"]
 
     return list(merged_map.values())
 

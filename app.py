@@ -1208,6 +1208,21 @@ def render_dashboard_page(username: str, settings: Dict[str, Any], items: List[D
         escaped_title = item.get("title", "").replace("'", "\\'").replace('"', '&quot;')
         magnet_str = item.get("magnet") or ""
 
+        poster_url = item.get("poster") or ""
+        if not poster_url and imdb_id and str(imdb_id).startswith("tt"):
+            poster_url = f"https://images.metahub.space/poster/small/{imdb_id}/img"
+
+        if poster_url:
+            preview_url = poster_url.replace("/poster/small/", "/poster/medium/")
+            poster_html = f"""<div class='poster-container'>
+                        <img src='{html.escape(poster_url)}' alt='Poster' class='poster-thumb' loading='lazy' onerror="this.onerror=null; this.parentElement.innerHTML='<div class=\\'poster-placeholder\\' title=\\'No poster\\'>🎬</div>';">
+                        <div class='poster-hover-preview'>
+                            <img src='{html.escape(preview_url)}' alt='{escaped_title} poster' loading='lazy'>
+                        </div>
+                    </div>"""
+        else:
+            poster_html = "<div class='poster-placeholder' title='No poster available'>🎬</div>"
+
         sources = item.get("sources", [])
         source_keys_str = ",".join(item.get("source_keys", ["tpb"]))
 
@@ -1225,8 +1240,13 @@ def render_dashboard_page(username: str, settings: Dict[str, Any], items: List[D
         rows.append(f"""
             <tr data-status="{html.escape(status)}" data-genre="{html.escape(genre_match)}" data-sources="{html.escape(source_keys_str)}" data-release-date="{html.escape(release_date)}" data-year="{year_val}">
                 <td>
-                    <div class='title-main'>{title_html}</div>
-                    {synopsis_html}
+                    <div class='media-cell'>
+                        {poster_html}
+                        <div class='media-details'>
+                            <div class='title-main'>{title_html}</div>
+                            {synopsis_html}
+                        </div>
+                    </div>
                 </td>
                 <td><span style="font-family: monospace; font-size: 13px; color: #cbd5e1;">{html.escape(date_display)}</span></td>
                 <td>{source_badge}</td>
@@ -1435,10 +1455,85 @@ def render_dashboard_page(username: str, settings: Dict[str, Any], items: List[D
         .reset-filter-btn {{ display: none; background: #262626; border: 1px solid #444; color: #38bdf8; padding: 2px 8px; border-radius: 4px; font-size: 11px; cursor: pointer; }}
         .reset-filter-btn:hover {{ background: #333; }}
 
-        table {{ width: 100%; border-collapse: collapse; background: #181818; border-radius: 8px; overflow: hidden; border: 1px solid #2e2e2e; }}
-        th, td {{ border-bottom: 1px solid #282828; padding: 12px 14px; text-align: left; font-size: 14px; vertical-align: top; }}
+        table {{ width: 100%; border-collapse: collapse; background: #181818; border-radius: 8px; border: 1px solid #2e2e2e; }}
+        th, td {{ border-bottom: 1px solid #282828; padding: 12px 14px; text-align: left; font-size: 14px; vertical-align: top; position: relative; }}
         th {{ background: #222; color: #94a3b8; font-weight: 600; text-transform: uppercase; font-size: 12px; letter-spacing: 0.5px; }}
+        tr {{ position: relative; }}
         tr:hover {{ background: #202020; }}
+
+        /* Option C: Integrated Media Cell with Poster Thumbnail and Hover Zoom */
+        .media-cell {{
+            display: flex;
+            gap: 12px;
+            align-items: flex-start;
+        }}
+        .poster-container {{
+            position: relative;
+            flex-shrink: 0;
+            width: 44px;
+            height: 64px;
+            border-radius: 4px;
+            cursor: pointer;
+        }}
+        .poster-thumb {{
+            width: 44px;
+            height: 64px;
+            object-fit: cover;
+            border-radius: 4px;
+            border: 1px solid #333;
+            background: #1e1e1e;
+            display: block;
+            transition: border-color 0.15s ease-in-out, transform 0.15s ease-in-out;
+        }}
+        .poster-container:hover .poster-thumb {{
+            border-color: #38bdf8;
+            transform: scale(1.04);
+        }}
+        .poster-placeholder {{
+            width: 44px;
+            height: 64px;
+            border-radius: 4px;
+            border: 1px solid #2e2e2e;
+            background: #1e1e1e;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            color: #64748b;
+            user-select: none;
+            flex-shrink: 0;
+        }}
+        .poster-hover-preview {{
+            position: absolute;
+            left: 54px;
+            top: -12px;
+            z-index: 1000;
+            width: 160px;
+            height: 240px;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 16px 36px rgba(0, 0, 0, 0.88), 0 0 0 1px rgba(255, 255, 255, 0.12);
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.18s ease-in-out, transform 0.18s ease-in-out;
+            transform: scale(0.92) translateX(-6px);
+            background: #181818;
+        }}
+        .poster-container:hover .poster-hover-preview {{
+            opacity: 1;
+            pointer-events: auto;
+            transform: scale(1) translateX(0);
+        }}
+        .poster-hover-preview img {{
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+        }}
+        .media-details {{
+            flex: 1;
+            min-width: 0;
+        }}
         .title-link {{ color: #38bdf8; text-decoration: none; font-weight: 600; font-size: 14px; }}
         .title-link:hover {{ text-decoration: underline; color: #7dd3fc; }}
         .title-main {{ font-weight: 600; color: #f8fafc; font-size: 14px; }}
