@@ -119,40 +119,40 @@ def logout_token(token: Optional[str]):
 
 
 def get_default_settings(username: str) -> Dict[str, Any]:
-    """Creates initial default settings based on current system environment."""
+    """Creates blank initial settings for a newly registered user (never exposes server credentials)."""
     return {
         "username": username,
-        # Media Server Settings
-        "media_server": os.getenv("MEDIA_SERVER", "plex").lower(),
-        "plex_url": os.getenv("PLEX_URL", "http://localhost:32400"),
-        "plex_token": os.getenv("PLEX_TOKEN", ""),
-        "plex_movie_libraries": os.getenv("PLEX_MOVIE_LIBRARIES", ""),
-        "plex_tv_libraries": os.getenv("PLEX_TV_LIBRARIES", ""),
-        "jellyfin_url": os.getenv("JELLYFIN_URL", "http://localhost:8096"),
-        "jellyfin_key": os.getenv("JELLYFIN_KEY", ""),
-        "emby_url": os.getenv("EMBY_URL", "http://localhost:8096"),
-        "emby_key": os.getenv("EMBY_KEY", ""),
-        # Downloader Settings
-        "download_client": os.getenv("DOWNLOAD_CLIENT", "radarr").lower(),
-        "radarr_url": os.getenv("RADARR_URL", "http://localhost:7878"),
-        "radarr_api_key": os.getenv("RADARR_API_KEY", ""),
-        "radarr_root_folder": os.getenv("RADARR_ROOT_FOLDER", ""),
-        "radarr_quality_profile": os.getenv("RADARR_QUALITY_PROFILE", ""),
-        "rutorrent_url": os.getenv("RUTORRENT_URL", "http://localhost/rutorrent"),
-        "rutorrent_user": os.getenv("RUTORRENT_USER", ""),
-        "rutorrent_password": os.getenv("RUTORRENT_PASSWORD", ""),
-        "rutorrent_start_now": os.getenv("RUTORRENT_START_NOW", "true").lower() in ("true", "1", "yes"),
-        # Scraper URLs
+        # Media Server Settings (always blank for new users)
+        "media_server": "plex",
+        "plex_url": "http://localhost:32400",
+        "plex_token": "",
+        "plex_movie_libraries": "",
+        "plex_tv_libraries": "",
+        "jellyfin_url": "http://localhost:8096",
+        "jellyfin_key": "",
+        "emby_url": "http://localhost:8096",
+        "emby_key": "",
+        # Downloader Settings (always blank for new users)
+        "download_client": "radarr",
+        "radarr_url": "http://localhost:7878",
+        "radarr_api_key": "",
+        "radarr_root_folder": "",
+        "radarr_quality_profile": "",
+        "rutorrent_url": "",
+        "rutorrent_user": "",
+        "rutorrent_password": "",
+        "rutorrent_start_now": True,
+        # Scraper Sources
         "site_scan1": os.getenv("SITE_SCAN1") or os.getenv("SITE_SCAN") or "https://thepiratebay.org/search.php?q=top100:48h_207",
         "site_scan2": os.getenv("SITE_SCAN2") or "https://uindex.org/top.php?c=1&t=7d",
         "site_scan3": os.getenv("SITE_SCAN3", ""),
         # Filter Criteria
-        "filter_exclude_existing": os.getenv("FILTER_EXCLUDE_EXISTING", "true").lower() in ("true", "1", "yes"),
-        "filter_only_current_year": os.getenv("FILTER_ONLY_CURRENT_YEAR", "true").lower() in ("true", "1", "yes"),
-        "filter_target_year": int(os.getenv("FILTER_TARGET_YEAR", "2026")),
-        "filter_min_imdb_score": float(os.getenv("FILTER_MIN_IMDB_SCORE", "5.0")),
-        "filter_require_english": os.getenv("FILTER_REQUIRE_ENGLISH", "true").lower() in ("true", "1", "yes"),
-        "filter_disliked_genres": [g.strip() for g in os.getenv("FILTER_DISLIKED_GENRES", "Fantasy, Romance").split(",") if g.strip()],
+        "filter_exclude_existing": True,
+        "filter_only_current_year": True,
+        "filter_target_year": 2026,
+        "filter_min_imdb_score": 5.0,
+        "filter_require_english": True,
+        "filter_disliked_genres": ["Fantasy", "Romance"],
         # Paths
         "profile_file": str(PROFILES_DIR / f"{username}_library_profile.json"),
         "last_scan_time": None
