@@ -34,6 +34,39 @@ app = FastAPI(title="New Media Analyser", version="0.4.0")
 DATA_DIR = Path("data")
 PROFILES_DIR = DATA_DIR / "profiles"
 CACHE_FILE = DATA_DIR / "scraped_releases_cache.json"
+FEEDBACK_FILE = DATA_DIR / "feedback.json"
+
+
+class FeedbackPayload(BaseModel):
+    rating: Optional[str] = "😍 Love it"
+    category: Optional[str] = "General Impressions"
+    comments: str
+    page: Optional[str] = "/dashboard"
+
+
+def load_feedback_entries() -> List[Dict[str, Any]]:
+    """Loads tester feedback entries from disk (newest first)."""
+    if not FEEDBACK_FILE.exists():
+        return []
+    try:
+        with open(FEEDBACK_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+            return data if isinstance(data, list) else []
+    except Exception as e:
+        logger.error(f"Error loading feedback entries: {e}")
+        return []
+
+
+def save_feedback_entry(entry: Dict[str, Any]) -> None:
+    """Saves a new tester feedback entry to disk."""
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    entries = load_feedback_entries()
+    entries.insert(0, entry)
+    try:
+        with open(FEEDBACK_FILE, "w", encoding="utf-8") as f:
+            json.dump(entries, f, indent=2)
+    except Exception as e:
+        logger.error(f"Error saving feedback entry: {e}")
 
 # In-memory scan status tracking
 scan_lock = asyncio.Lock()
@@ -254,6 +287,438 @@ def get_logo_svg(size: int = 28) -> str:
 </svg>"""
 
 
+def get_feedback_css() -> str:
+    """Returns CSS styles for the feedback button and modal dialog."""
+    return """
+        /* Feedback Button & Modal Styles */
+        .btn-feedback {
+            background: rgba(56, 189, 248, 0.12);
+            color: #38bdf8;
+            border: 1px solid rgba(56, 189, 248, 0.35);
+            padding: 7px 14px;
+            border-radius: 6px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            text-decoration: none;
+            transition: all 0.15s ease;
+        }
+        .btn-feedback:hover {
+            background: #38bdf8;
+            color: #0f172a;
+            border-color: #38bdf8;
+            transform: translateY(-1px);
+        }
+        .feedback-backdrop {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0, 0, 0, 0.78);
+            backdrop-filter: blur(5px);
+            z-index: 10000;
+            align-items: center;
+            justify-content: center;
+            padding: 16px;
+        }
+        .feedback-modal {
+            background: #181818;
+            border: 1px solid #333333;
+            border-radius: 12px;
+            width: 100%;
+            max-width: 500px;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7);
+            overflow: hidden;
+            animation: feedbackFadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        @keyframes feedbackFadeIn {
+            from { opacity: 0; transform: scale(0.95); }
+            to { opacity: 1; transform: scale(1); }
+        }
+        .feedback-header {
+            padding: 16px 20px;
+            background: #1f1f1f;
+            border-bottom: 1px solid #2d2d2d;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .feedback-header h3 {
+            margin: 0;
+            font-size: 16px;
+            color: #f8fafc;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .feedback-close {
+            background: none;
+            border: none;
+            color: #94a3b8;
+            font-size: 22px;
+            cursor: pointer;
+            padding: 0;
+            line-height: 1;
+        }
+        .feedback-close:hover {
+            color: #f8fafc;
+        }
+        .feedback-body {
+            padding: 20px;
+        }
+        .feedback-rating-group {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 16px;
+            flex-wrap: wrap;
+        }
+        .feedback-rating-btn {
+            flex: 1;
+            min-width: 80px;
+            background: #222222;
+            border: 1px solid #383838;
+            color: #cbd5e1;
+            padding: 8px 10px;
+            border-radius: 6px;
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.15s ease;
+            text-align: center;
+        }
+        .feedback-rating-btn:hover {
+            border-color: #38bdf8;
+            color: #38bdf8;
+        }
+        .feedback-rating-btn.active {
+            background: #38bdf8;
+            color: #0f172a;
+            border-color: #38bdf8;
+            font-weight: 700;
+        }
+        .feedback-label {
+            display: block;
+            font-size: 12px;
+            font-weight: 600;
+            color: #94a3b8;
+            margin-bottom: 6px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .feedback-select, .feedback-textarea {
+            width: 100%;
+            background: #121212;
+            border: 1px solid #333333;
+            border-radius: 6px;
+            color: #f8fafc;
+            padding: 10px 12px;
+            font-size: 13px;
+            box-sizing: border-box;
+            outline: none;
+            transition: border-color 0.15s;
+        }
+        .feedback-select:focus, .feedback-textarea:focus {
+            border-color: #38bdf8;
+        }
+        .feedback-textarea {
+            min-height: 100px;
+            resize: vertical;
+            font-family: inherit;
+        }
+        .feedback-actions {
+            display: flex;
+            gap: 10px;
+            margin-top: 18px;
+            flex-wrap: wrap;
+        }
+        .btn-fb-submit {
+            flex: 2;
+            min-width: 150px;
+            background: #38bdf8;
+            color: #0f172a;
+            border: none;
+            padding: 11px 16px;
+            border-radius: 6px;
+            font-size: 13px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: background 0.15s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+        }
+        .btn-fb-submit:hover {
+            background: #7dd3fc;
+        }
+        .btn-fb-wa {
+            flex: 1.5;
+            min-width: 130px;
+            background: #22c55e;
+            color: #ffffff;
+            border: none;
+            padding: 11px 16px;
+            border-radius: 6px;
+            font-size: 13px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: background 0.15s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            text-decoration: none;
+        }
+        .btn-fb-wa:hover {
+            background: #16a34a;
+        }
+        .btn-fb-email {
+            background: #2a2a2a;
+            color: #cbd5e1;
+            border: 1px solid #444;
+            padding: 11px 14px;
+            border-radius: 6px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.15s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            text-decoration: none;
+        }
+        .btn-fb-email:hover {
+            background: #333;
+            color: #ffffff;
+            border-color: #555;
+        }
+    """
+
+
+def get_feedback_modal_html(username: str) -> str:
+    """Returns HTML markup for the tester feedback modal."""
+    escaped_user = html.escape(username)
+    return f"""
+    <!-- Feedback Modal -->
+    <div id="feedbackModal" class="feedback-backdrop" onclick="handleFeedbackBackdropClick(event)">
+        <div class="feedback-modal" onclick="event.stopPropagation()">
+            <div class="feedback-header">
+                <h3><span>💬</span> Share Your Feedback</h3>
+                <button type="button" class="feedback-close" onclick="closeFeedbackModal()">&times;</button>
+            </div>
+            <div class="feedback-body">
+                <p style="margin: 0 0 16px 0; font-size: 13px; color: #94a3b8; line-height: 1.4;">
+                    Hey <strong>{escaped_user}</strong>! Thanks for testing New Media Analyser. Let us know how it's working for you, any bugs you hit, or features you'd like to see!
+                </p>
+
+                <!-- Rating Selection -->
+                <div style="margin-bottom: 14px;">
+                    <label class="feedback-label">How's your experience?</label>
+                    <div class="feedback-rating-group" id="feedbackRatingGroup">
+                        <button type="button" class="feedback-rating-btn active" data-rating="😍 Love it" onclick="selectFeedbackRating(this)">😍 Love it</button>
+                        <button type="button" class="feedback-rating-btn" data-rating="👍 Good" onclick="selectFeedbackRating(this)">👍 Good</button>
+                        <button type="button" class="feedback-rating-btn" data-rating="😐 Okay" onclick="selectFeedbackRating(this)">😐 Okay</button>
+                        <button type="button" class="feedback-rating-btn" data-rating="🐛 Bug" onclick="selectFeedbackRating(this)">🐛 Bug</button>
+                    </div>
+                </div>
+
+                <!-- Category -->
+                <div style="margin-bottom: 14px;">
+                    <label class="feedback-label">Feedback Topic</label>
+                    <select id="feedbackCategory" class="feedback-select">
+                        <option value="General Impressions">💡 General Impressions & Ease of Use</option>
+                        <option value="Posters & Layout">🖼️ Movie Posters & Visual Layout</option>
+                        <option value="Media Server & Download">⚙️ Plex/Jellyfin/Emby or Downloader</option>
+                        <option value="Releases & Matching">🔍 Release Scanning & Taste Matches</option>
+                        <option value="Bug / Error">🐛 Bug Report / Error</option>
+                        <option value="Feature Idea">🚀 New Feature Idea</option>
+                    </select>
+                </div>
+
+                <!-- Textarea -->
+                <div style="margin-bottom: 16px;">
+                    <label class="feedback-label">Your Comments / Notes</label>
+                    <textarea id="feedbackComments" class="feedback-textarea" placeholder="Tell us what you liked, what was confusing, or anything you'd tweak..."></textarea>
+                </div>
+
+                <!-- Status notification -->
+                <div id="feedbackModalStatus" style="display: none; padding: 10px 14px; border-radius: 6px; font-size: 13px; margin-bottom: 14px;"></div>
+
+                <!-- Hybrid Actions -->
+                <div class="feedback-actions">
+                    <button type="button" id="btnSubmitFeedback" class="btn-fb-submit" onclick="submitInAppFeedback()">
+                        <span>🚀 Submit in App</span>
+                    </button>
+                    <button type="button" class="btn-fb-wa" onclick="sendWhatsappFeedback()">
+                        <span>📱 WhatsApp</span>
+                    </button>
+                    <button type="button" class="btn-fb-email" onclick="sendEmailFeedback()">
+                        <span>✉️ Email</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    """
+
+
+def get_feedback_js(username: str) -> str:
+    """Returns JavaScript client logic for submitting feedback, opening WhatsApp, or email."""
+    admin_wa = os.getenv("FEEDBACK_WHATSAPP", "").strip()
+    admin_email = os.getenv("FEEDBACK_EMAIL", "").strip()
+    u_json = json.dumps(username)
+    wa_json = json.dumps(admin_wa)
+    email_json = json.dumps(admin_email)
+    return f"""
+        let currentFeedbackRating = "😍 Love it";
+        const feedbackUsername = {u_json};
+        const adminWhatsappNumber = {wa_json};
+        const adminEmailAddress = {email_json};
+
+        function openFeedbackModal() {{
+            const m = document.getElementById('feedbackModal');
+            if (m) {{
+                m.style.display = 'flex';
+                const st = document.getElementById('feedbackModalStatus');
+                if (st) st.style.display = 'none';
+                const tb = document.getElementById('feedbackComments');
+                if (tb) tb.focus();
+            }}
+        }}
+
+        function closeFeedbackModal() {{
+            const m = document.getElementById('feedbackModal');
+            if (m) m.style.display = 'none';
+        }}
+
+        function handleFeedbackBackdropClick(event) {{
+            if (event.target && event.target.id === 'feedbackModal') {{
+                closeFeedbackModal();
+            }}
+        }}
+
+        function selectFeedbackRating(btn) {{
+            document.querySelectorAll('#feedbackRatingGroup .feedback-rating-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            currentFeedbackRating = btn.getAttribute('data-rating') || "👍 Good";
+        }}
+
+        function getFeedbackFormattedText() {{
+            const catElem = document.getElementById('feedbackCategory');
+            const category = catElem ? catElem.value : "General";
+            const commElem = document.getElementById('feedbackComments');
+            const comments = commElem ? (commElem.value || "").trim() : "";
+            let text = "New Media Analyser Feedback from " + feedbackUsername + ":\\n";
+            text += "⭐ Experience: " + currentFeedbackRating + "\\n";
+            text += "📂 Topic: " + category + "\\n";
+            if (comments) {{
+                text += "💬 Comments: " + comments + "\\n";
+            }} else {{
+                text += "💬 Comments: (No additional comments)\\n";
+            }}
+            return text;
+        }}
+
+        async function submitInAppFeedback() {{
+            const commElem = document.getElementById('feedbackComments');
+            const comments = commElem ? (commElem.value || "").trim() : "";
+            const catElem = document.getElementById('feedbackCategory');
+            const category = catElem ? catElem.value : "General";
+            const statusBox = document.getElementById('feedbackModalStatus');
+            const submitBtn = document.getElementById('btnSubmitFeedback');
+
+            if (!comments) {{
+                if (statusBox) {{
+                    statusBox.style.display = 'block';
+                    statusBox.style.background = 'rgba(239, 68, 68, 0.15)';
+                    statusBox.style.color = '#ef4444';
+                    statusBox.style.border = '1px solid rgba(239, 68, 68, 0.3)';
+                    statusBox.textContent = 'Please enter a few words in the comments box.';
+                }}
+                return;
+            }}
+
+            if (submitBtn) {{
+                submitBtn.disabled = true;
+                submitBtn.textContent = 'Submitting...';
+            }}
+
+            try {{
+                const res = await fetch('/api/feedback', {{
+                    method: 'POST',
+                    headers: {{ 'Content-Type': 'application/json' }},
+                    body: JSON.stringify({{
+                        rating: currentFeedbackRating,
+                        category: category,
+                        comments: comments,
+                        page: window.location.pathname
+                    }})
+                }});
+                const data = await res.json();
+                if (data.success) {{
+                    if (statusBox) {{
+                        statusBox.style.display = 'block';
+                        statusBox.style.background = 'rgba(34, 197, 94, 0.15)';
+                        statusBox.style.color = '#22c55e';
+                        statusBox.style.border = '1px solid rgba(34, 197, 94, 0.3)';
+                        statusBox.textContent = '🎉 Thank you! Your feedback has been saved.';
+                    }}
+                    if (commElem) commElem.value = '';
+                    setTimeout(() => {{
+                        closeFeedbackModal();
+                        if (submitBtn) {{
+                            submitBtn.disabled = false;
+                            submitBtn.innerHTML = '<span>🚀 Submit in App</span>';
+                        }}
+                    }}, 1500);
+                }} else {{
+                    if (statusBox) {{
+                        statusBox.style.display = 'block';
+                        statusBox.style.background = 'rgba(239, 68, 68, 0.15)';
+                        statusBox.style.color = '#ef4444';
+                        statusBox.style.border = '1px solid rgba(239, 68, 68, 0.3)';
+                        statusBox.textContent = data.detail || data.message || 'Error saving feedback.';
+                    }}
+                    if (submitBtn) {{
+                        submitBtn.disabled = false;
+                        submitBtn.innerHTML = '<span>🚀 Submit in App</span>';
+                    }}
+                }}
+            }} catch (err) {{
+                if (statusBox) {{
+                    statusBox.style.display = 'block';
+                    statusBox.style.background = 'rgba(239, 68, 68, 0.15)';
+                    statusBox.style.color = '#ef4444';
+                    statusBox.style.border = '1px solid rgba(239, 68, 68, 0.3)';
+                    statusBox.textContent = 'Network error submitting feedback.';
+                }}
+                if (submitBtn) {{
+                    submitBtn.disabled = false;
+                    submitBtn.innerHTML = '<span>🚀 Submit in App</span>';
+                }}
+            }}
+        }}
+
+        function sendWhatsappFeedback() {{
+            const text = getFeedbackFormattedText();
+            const encoded = encodeURIComponent(text);
+            const url = adminWhatsappNumber ? ("https://wa.me/" + adminWhatsappNumber + "?text=" + encoded) : ("https://wa.me/?text=" + encoded);
+            window.open(url, '_blank');
+        }}
+
+        function sendEmailFeedback() {{
+            const text = getFeedbackFormattedText();
+            const subject = encodeURIComponent("[New Media Analyser Feedback] from " + feedbackUsername);
+            const body = encodeURIComponent(text);
+            const url = adminEmailAddress ? ("mailto:" + adminEmailAddress + "?subject=" + subject + "&body=" + body) : ("mailto:?subject=" + subject + "&body=" + body);
+            window.open(url, '_blank');
+        }}
+    """
+
+
 def render_login_page(error: str = "") -> str:
     return f"""<!DOCTYPE html>
 <html lang="en">
@@ -460,6 +925,36 @@ def render_settings_page(username: str, settings: Dict[str, Any]) -> str:
     disliked = settings.get("filter_disliked_genres", ["Fantasy", "Romance"])
     disliked_str = ", ".join(disliked) if isinstance(disliked, list) else str(disliked)
 
+    feedback_entries = load_feedback_entries()
+    if feedback_entries:
+        feedback_cards = []
+        for fb in feedback_entries:
+            ts = html.escape(str(fb.get("timestamp", "Recent")))
+            u = html.escape(str(fb.get("username", "Unknown")))
+            r = html.escape(str(fb.get("rating", "Feedback")))
+            cat = html.escape(str(fb.get("category", "General")))
+            c = html.escape(str(fb.get("comments", "")))
+            feedback_cards.append(f"""
+                <div style="background: #181818; border: 1px solid #2e2e2e; border-radius: 8px; padding: 14px 16px; margin-bottom: 10px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; flex-wrap: wrap; gap: 6px;">
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <span style="font-weight: 700; color: #38bdf8; font-size: 13px;">👤 {u}</span>
+                            <span style="background: rgba(56, 189, 248, 0.15); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.3); padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: 600;">{r}</span>
+                            <span style="background: #252525; color: #94a3b8; padding: 2px 8px; border-radius: 12px; font-size: 11px;">{cat}</span>
+                        </div>
+                        <span style="font-size: 11px; color: #64748b;">🕒 {ts}</span>
+                    </div>
+                    <div style="font-size: 13px; color: #e2e8f0; line-height: 1.5; white-space: pre-wrap; background: #121212; padding: 10px 12px; border-radius: 6px; border-left: 3px solid #38bdf8;">{c}</div>
+                </div>
+            """)
+        feedback_list_html = "".join(feedback_cards)
+    else:
+        feedback_list_html = """
+            <div style="background: #181818; border: 1px dashed #333333; border-radius: 8px; padding: 24px; text-align: center; color: #94a3b8; font-size: 13px;">
+                💬 No tester feedback entries yet. When Paul or other testers submit feedback using the <strong>💬 Feedback</strong> button, their notes will appear here!
+            </div>
+        """
+
     genres_all = [
         "Action", "Adventure", "Animation", "Biography", "Comedy", "Crime", "Documentary",
         "Drama", "Family", "Fantasy", "Film-Noir", "History", "Horror", "Music", "Musical",
@@ -638,6 +1133,7 @@ def render_settings_page(username: str, settings: Dict[str, Any]) -> str:
             display: none;
             z-index: 9999;
         }}
+        {get_feedback_css()}
     </style>
 </head>
 <body>
@@ -648,6 +1144,7 @@ def render_settings_page(username: str, settings: Dict[str, Any]) -> str:
         </div>
         <div class="nav-links">
             <span class="user-pill">👤 <strong>{html.escape(username)}</strong></span>
+            <button type="button" class="btn-feedback" onclick="openFeedbackModal()">💬 Feedback</button>
             <a href="/dashboard" class="btn btn-primary" style="text-decoration: none;">📊 Dashboard</a>
             <a href="/api/auth/logout" class="btn btn-signout" style="text-decoration: none;">Sign Out</a>
         </div>
@@ -863,6 +1360,15 @@ def render_settings_page(username: str, settings: Dict[str, Any]) -> str:
                     {''.join(pills_html)}
                 </div>
             </div>
+        </div>
+
+        <!-- 4. Tester Feedback Received -->
+        <div class="section-card" id="feedbackLogCard">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 8px;">
+                <h3 style="margin: 0;">4. Tester Feedback Log</h3>
+                <span style="font-size: 12px; color: #94a3b8;">Submissions from Paul and testing friends</span>
+            </div>
+            {feedback_list_html}
         </div>
 
         <div style="display: flex; gap: 12px; margin-top: 10px; align-items: center; flex-wrap: wrap;">
@@ -1123,7 +1629,10 @@ def render_settings_page(username: str, settings: Dict[str, Any]) -> str:
                 alert('Connection error while saving settings.');
             }}
         }}
+
+        {get_feedback_js(username)}
     </script>
+    {get_feedback_modal_html(username)}
 </body>
 </html>"""
 
@@ -1827,6 +2336,7 @@ def render_dashboard_page(username: str, settings: Dict[str, Any], items: List[D
         .toast.success {{ border-left-color: #4ade80; }}
         .toast.error {{ border-left-color: #f87171; }}
         @keyframes slideIn {{ from {{ transform: translateX(100%); opacity: 0; }} to {{ transform: translateX(0); opacity: 1; }} }}
+        {get_feedback_css()}
     </style>
 </head>
 <body>
@@ -1841,6 +2351,7 @@ def render_dashboard_page(username: str, settings: Dict[str, Any], items: List[D
             {downloader_pill_html}
         </div>
         <div class="nav-links">
+            <button type="button" class="btn-feedback" onclick="openFeedbackModal()">💬 Feedback</button>
             <a href="/settings" class="btn-settings">⚙️ Settings</a>
             <a href="/api/auth/logout" class="btn-signout">Sign Out</a>
         </div>
@@ -2210,7 +2721,10 @@ def render_dashboard_page(username: str, settings: Dict[str, Any], items: List[D
                 applyFilters();
             }});
         }});
+
+        {get_feedback_js(username)}
     </script>
+    {get_feedback_modal_html(username)}
 </body>
 </html>"""
 
@@ -2538,6 +3052,38 @@ async def api_request(
         "client": result.client,
         "title": result.title
     }
+
+
+@app.post("/api/feedback")
+async def api_submit_feedback(payload: FeedbackPayload, request: Request):
+    """Stores tester feedback in data/feedback.json."""
+    user = get_current_user(request) or "Guest"
+    comments = (payload.comments or "").strip()
+    if not comments:
+        raise HTTPException(status_code=400, detail="Comments cannot be empty")
+
+    import datetime
+    entry = {
+        "id": f"fb_{int(datetime.datetime.now().timestamp())}",
+        "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "username": user,
+        "rating": payload.rating or "😍 Love it",
+        "category": payload.category or "General Impressions",
+        "comments": comments,
+        "page": payload.page or "/dashboard"
+    }
+    save_feedback_entry(entry)
+    logger.info(f"Feedback received from '{user}': [{entry['rating']}] {comments[:80]}")
+    return {"success": True, "message": "Feedback submitted successfully! Thank you!"}
+
+
+@app.get("/api/feedback")
+async def api_get_feedback(request: Request):
+    """Retrieves all tester feedback entries."""
+    user = get_current_user(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    return {"success": True, "entries": load_feedback_entries()}
 
 
 if __name__ == "__main__":

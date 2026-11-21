@@ -17,6 +17,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.6.0] - 2026-11-21
 
 ### Added
+- **Tester Feedback System (In-App, WhatsApp & Email Hybrid)**:
+  - Added a prominent `💬 Feedback` button in the dashboard and settings navigation bars.
+  - Interactive dark-theme modal allowing testers to submit experience ratings, categories, and freeform comments.
+  - Hybrid dispatch: submit directly into `data/feedback.json`, send pre-formatted text via WhatsApp (`wa.me`), or open an email draft.
+  - Added a dedicated "4. Tester Feedback Log" section in `/settings` allowing admins to review all feedback directly inside the web UI.
 - **Visual Movie Posters & Hover Zoom Preview**:
   - Integrated 44×64px movie poster thumbnails directly into the primary media title/synopsis table cell (`.media-cell`).
   - Added smooth interactive hover zoom preview expanding posters to a high-resolution 160×240px card with drop-shadow and fade animation.
