@@ -1099,6 +1099,51 @@ def render_settings_page(username: str, settings: Dict[str, Any]) -> str:
 </html>"""
 
 
+def get_source_url(source_name: str, item: Dict[str, Any]) -> str:
+    """Returns direct detail record link or search fallback link for a given source."""
+    import urllib.parse
+    clean_title = item.get("clean_title") or item.get("title", "")
+    imdb_id = item.get("imdb_id") or ""
+
+    # 1. Check direct href in source_details or source_urls
+    details = item.get("source_details", {})
+    if isinstance(details, dict):
+        src_info = details.get(source_name, {})
+        if isinstance(src_info, dict) and src_info.get("href"):
+            href = src_info["href"]
+            if href.startswith("http"):
+                return href
+            if source_name in ("TPB", "PB"):
+                return f"https://thepiratebay.org{href if href.startswith('/') else '/' + href}"
+            elif source_name.lower() in ("uindex",):
+                return f"https://uindex.org{href if href.startswith('/') else '/' + href}"
+
+    urls = item.get("source_urls", {})
+    if isinstance(urls, dict) and urls.get(source_name):
+        return urls[source_name]
+
+    if item.get("source") == source_name and item.get("href"):
+        href = item["href"]
+        if href.startswith("http"):
+            return href
+        if source_name in ("TPB", "PB"):
+            return f"https://thepiratebay.org{href if href.startswith('/') else '/' + href}"
+        elif source_name.lower() in ("uindex",):
+            return f"https://uindex.org{href if href.startswith('/') else '/' + href}"
+
+    # 2. Fallbacks
+    if source_name in ("TPB", "PB"):
+        if imdb_id and str(imdb_id).startswith("tt"):
+            return f"https://thepiratebay.org/search.php?q={imdb_id}"
+        return f"https://thepiratebay.org/search.php?q={urllib.parse.quote_plus(clean_title)}"
+    elif source_name.lower() in ("uindex",):
+        if imdb_id and str(imdb_id).startswith("tt"):
+            return f"https://uindex.org/search.php?search={imdb_id}"
+        return f"https://uindex.org/search.php?search={urllib.parse.quote_plus(clean_title)}"
+
+    return "#"
+
+
 def render_dashboard_page(username: str, settings: Dict[str, Any], items: List[Dict[str, Any]]) -> str:
     downloader_raw = settings.get("download_client", "radarr")
     downloader_name = {
@@ -1225,15 +1270,27 @@ def render_dashboard_page(username: str, settings: Dict[str, Any], items: List[D
 
         sources = item.get("sources", [])
         source_keys_str = ",".join(item.get("source_keys", ["tpb"]))
+        source_keys = [k.lower() for k in item.get("source_keys", [])]
 
-        if len(sources) > 1:
-            source_badge = f"<span class='badge badge-source-multi' title='Available on {html.escape(', '.join(sources))}'>TPB + uIndex</span>"
-        elif "uIndex" in sources or "uindex" in source_keys_str:
-            source_badge = "<span class='badge badge-source-uindex'>uIndex</span>"
-        elif "TPB" in sources or "tpb" in source_keys_str:
-            source_badge = "<span class='badge badge-source-tpb'>TPB</span>"
-        else:
-            source_badge = f"<span class='badge badge-source-other'>{html.escape(item.get('source_display', 'Unknown'))}</span>"
+        has_tpb = any(s.lower() in ("tpb", "thepiratebay", "pb") for s in sources) or "tpb" in source_keys
+        has_uindex = any("uindex" in s.lower() for s in sources) or "uindex" in source_keys
+
+        source_pills = []
+        if has_tpb:
+            tpb_url = get_source_url("TPB", item)
+            source_pills.append(f'<a href="{html.escape(tpb_url)}" target="_blank" rel="noopener noreferrer" class="badge-source-btn badge-source-tpb" title="View details on The Pirate Bay">PB ↗</a>')
+        if has_uindex:
+            uindex_url = get_source_url("uIndex", item)
+            source_pills.append(f'<a href="{html.escape(uindex_url)}" target="_blank" rel="noopener noreferrer" class="badge-source-btn badge-source-uindex" title="View details on uIndex">uIndex ↗</a>')
+
+        for s in sources:
+            if s.lower() not in ("tpb", "thepiratebay", "pb", "uindex"):
+                source_pills.append(f'<span class="badge-source-btn badge-source-other">{html.escape(s)}</span>')
+
+        if not source_pills:
+            source_pills.append(f'<span class="badge-source-btn badge-source-other">{html.escape(item.get("source_display", "Unknown"))}</span>')
+
+        source_badge_html = f'<div class="source-badges-container">{" ".join(source_pills)}</div>'
 
         btn_html = f"<button class='btn-request' data-magnet=\"{html.escape(magnet_str)}\" onclick=\"requestMedia(this, '{imdb_id}', '{escaped_title}', {year_val})\">Request ({downloader_name})</button>"
 
@@ -1249,7 +1306,7 @@ def render_dashboard_page(username: str, settings: Dict[str, Any], items: List[D
                     </div>
                 </td>
                 <td><span style="font-family: monospace; font-size: 13px; color: #cbd5e1;">{html.escape(date_display)}</span></td>
-                <td>{source_badge}</td>
+                <td>{source_badge_html}</td>
                 <td><span class='size-text'>{html.escape(size_str)}</span></td>
                 <td>
                     <span class='badge {genre_badge_cls}' title='{genre_reason}'>{genre_match}</span>
@@ -1550,10 +1607,54 @@ def render_dashboard_page(username: str, settings: Dict[str, Any], items: List[D
         .badge-match-medium {{ background: rgba(56, 189, 248, 0.18); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.4); }}
         .badge-match-low {{ background: rgba(148, 163, 184, 0.15); color: #94a3b8; border: 1px solid rgba(148, 163, 184, 0.3); }}
 
-        .badge-source-tpb {{ background: rgba(245, 158, 11, 0.16); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.35); }}
-        .badge-source-uindex {{ background: rgba(6, 182, 212, 0.16); color: #22d3ee; border: 1px solid rgba(6, 182, 212, 0.35); }}
-        .badge-source-multi {{ background: rgba(168, 85, 247, 0.18); color: #c084fc; border: 1px solid rgba(168, 85, 247, 0.45); font-weight: 700; }}
-        .badge-source-other {{ background: rgba(148, 163, 184, 0.16); color: #cbd5e1; border: 1px solid rgba(148, 163, 184, 0.35); }}
+        .source-badges-container {{
+            display: inline-flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            align-items: center;
+        }}
+        .badge-source-btn {{
+            display: inline-flex;
+            align-items: center;
+            gap: 3px;
+            padding: 3px 9px;
+            border-radius: 9999px;
+            font-size: 11px;
+            font-weight: 700;
+            text-decoration: none;
+            transition: all 0.15s ease-in-out;
+            white-space: nowrap;
+            letter-spacing: 0.3px;
+        }}
+        .badge-source-tpb {{
+            background: rgba(245, 158, 11, 0.16);
+            color: #fbbf24;
+            border: 1px solid rgba(245, 158, 11, 0.35);
+        }}
+        .badge-source-tpb:hover {{
+            background: rgba(245, 158, 11, 0.3);
+            color: #fde047;
+            border-color: #f59e0b;
+            transform: translateY(-1px);
+            box-shadow: 0 2px 8px rgba(245, 158, 11, 0.3);
+        }}
+        .badge-source-uindex {{
+            background: rgba(6, 182, 212, 0.16);
+            color: #22d3ee;
+            border: 1px solid rgba(6, 182, 212, 0.35);
+        }}
+        .badge-source-uindex:hover {{
+            background: rgba(6, 182, 212, 0.3);
+            color: #67e8f9;
+            border-color: #06b6d4;
+            transform: translateY(-1px);
+            box-shadow: 0 2px 8px rgba(6, 182, 212, 0.3);
+        }}
+        .badge-source-other {{
+            background: rgba(148, 163, 184, 0.16);
+            color: #cbd5e1;
+            border: 1px solid rgba(148, 163, 184, 0.35);
+        }}
         .genre-subtext {{ font-size: 11px; color: #94a3b8; margin-top: 4px; max-width: 220px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }}
         .no-matches {{ display: none; text-align: center; padding: 30px; color: #94a3b8; font-style: italic; }}
 

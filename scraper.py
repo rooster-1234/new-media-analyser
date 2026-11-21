@@ -374,6 +374,8 @@ async def scrape_tpb(page, url: str) -> List[Dict[str, Any]]:
             continue
         raw_title = (await title_el.inner_text()).strip()
         href = await title_el.get_attribute("href")
+        if href and not href.startswith("http"):
+            href = urllib.parse.urljoin("https://thepiratebay.org", href)
         size_el = await entry.query_selector(".item-size, span[class*='size']")
         size_text = (await size_el.inner_text()).replace("\xa0", " ").strip() if size_el else "N/A"
         mag_el = await entry.query_selector("a[href^='magnet:']")
@@ -416,6 +418,8 @@ async def scrape_uindex(page, url: str) -> List[Dict[str, Any]]:
             continue
         raw_title = (await title_el.first.inner_text()).strip()
         href = await title_el.first.get_attribute("href")
+        if href and not href.startswith("http"):
+            href = urllib.parse.urljoin("https://uindex.org", href)
         mag_el = row.locator("a[href^='magnet:']")
         magnet = await mag_el.first.get_attribute("href") if await mag_el.count() > 0 else ""
         size_text = (await cols[3].inner_text()).strip() if len(cols) > 3 else "N/A"
@@ -537,6 +541,7 @@ def deduplicate_and_merge(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         if key not in merged_map:
             item["sources"] = [source_name]
             item["source_keys"] = [source_key]
+            item["source_urls"] = {source_name: item.get("href", "")} if item.get("href") else {}
             item["source_details"] = {
                 source_name: {
                     "raw_title": item.get("title", ""),
@@ -554,6 +559,8 @@ def deduplicate_and_merge(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
             if source_key not in existing["source_keys"]:
                 existing["source_keys"].append(source_key)
 
+            if "source_details" not in existing or not isinstance(existing["source_details"], dict):
+                existing["source_details"] = {}
             existing["source_details"][source_name] = {
                 "raw_title": item.get("title", ""),
                 "size": item.get("size", "N/A"),
@@ -561,6 +568,10 @@ def deduplicate_and_merge(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
                 "seeders": item.get("seeders", 0),
                 "href": item.get("href", "")
             }
+            if "source_urls" not in existing or not isinstance(existing["source_urls"], dict):
+                existing["source_urls"] = {}
+            if item.get("href"):
+                existing["source_urls"][source_name] = item["href"]
 
             # Select best magnet (if existing has no magnet, or new item has more seeders)
             new_seeders = item.get("seeders", 0)
