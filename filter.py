@@ -311,7 +311,9 @@ class MediaFilter:
         reason = ""
 
         # 1. Check if item already exists in Plex
-        if self.exclude_existing and self.is_in_plex(clean_title):
+        in_library = self.is_in_plex(clean_title)
+        item["in_library"] = in_library
+        if in_library:
             status = "Exists"
             reason = f"'{clean_title}' already exists in Plex library"
 

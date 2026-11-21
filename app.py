@@ -83,12 +83,56 @@ def save_cached_raw_releases(items: List[Dict[str, Any]]):
         logger.warning(f"Failed to save release cache: {e}")
 
 
+def ensure_user_library_profile(username: str) -> Path:
+    """Ensures a user's media server library profile exists on disk; auto-syncs or clones if missing."""
+    settings = user_manager.get_user_settings(username)
+    profile_path = Path(settings.get("profile_file") or (PROFILES_DIR / f"{username}_library_profile.json"))
+    if profile_path.exists() and profile_path.stat().st_size > 100:
+        return profile_path
+
+    # Check if another profile already exists with identical server credentials (e.g. from E2E test runs)
+    for p in PROFILES_DIR.glob("*_library_profile.json"):
+        if p.exists() and p.stat().st_size > 100 and p.name != profile_path.name:
+            try:
+                profile_path.parent.mkdir(parents=True, exist_ok=True)
+                profile_path.write_text(p.read_text(encoding="utf-8"), encoding="utf-8")
+                logger.info(f"Initialized library profile for '{username}' from {p.name}")
+                return profile_path
+            except Exception:
+                pass
+
+    # Auto-generate profile if server credentials exist
+    server_type = (settings.get("media_server") or "plex").lower()
+    try:
+        provider = None
+        if server_type == "plex" and settings.get("plex_token"):
+            provider = PlexServerProvider(url=settings.get("plex_url", "http://localhost:32400"), token=settings.get("plex_token"))
+        elif server_type == "jellyfin" and settings.get("jellyfin_key"):
+            provider = JellyfinServerProvider(url=settings.get("jellyfin_url", "http://localhost:8096"), api_key=settings.get("jellyfin_key"))
+        elif server_type == "emby" and settings.get("emby_key"):
+            provider = EmbyServerProvider(url=settings.get("emby_url", "http://localhost:8096"), api_key=settings.get("emby_key"))
+        elif server_type == "all":
+            provider = CombinedServerProvider()
+
+        if provider and provider.connect():
+            profile = provider.generate_profile()
+            profile_path.parent.mkdir(parents=True, exist_ok=True)
+            with open(profile_path, "w", encoding="utf-8") as f:
+                json.dump(profile, f, indent=2, ensure_ascii=False)
+            logger.info(f"Auto-generated library profile for '{username}': {profile_path}")
+            return profile_path
+    except Exception as e:
+        logger.warning(f"Could not auto-generate library profile for '{username}': {e}")
+
+    return profile_path
+
+
 def get_user_media_filter(username: str) -> MediaFilter:
     """Instantiates a MediaFilter customized to the user's library and settings."""
+    profile_path = ensure_user_library_profile(username)
     settings = user_manager.get_user_settings(username)
-    profile_path = settings.get("profile_file") or str(PROFILES_DIR / f"{username}_library_profile.json")
 
-    flt = MediaFilter(profile_path=profile_path)
+    flt = MediaFilter(profile_path=str(profile_path))
     flt.exclude_existing = settings.get("filter_exclude_existing", True)
     flt.timeframe = settings.get("filter_timeframe", "365d")
     flt.only_current_year = settings.get("filter_only_current_year", True) if "filter_only_current_year" in settings else (flt.timeframe != "all")
@@ -1670,19 +1714,35 @@ def render_dashboard_page(username: str, settings: Dict[str, Any], items: List[D
             }}
         }}
 
+        let scanPollTimer = null;
         async function startScan() {{
             const btn = document.getElementById('btnGo');
             const txt = document.getElementById('btnGoText');
             btn.disabled = true;
             btn.className = 'btn-go loading';
-            txt.textContent = 'Scanning Live Sources...';
+            txt.textContent = '🚀 Connecting to indexers... (0 releases found)';
+
+            if (scanPollTimer) clearInterval(scanPollTimer);
+            scanPollTimer = setInterval(async () => {{
+                try {{
+                    const statusRes = await fetch('/api/scan/status');
+                    const statusData = await statusRes.json();
+                    if (statusData.is_scanning) {{
+                        const count = statusData.found || 0;
+                        const msg = statusData.message || 'Scanning...';
+                        txt.textContent = `🚀 Found ${{count}} releases: ${{msg}}`;
+                    }}
+                }} catch (e) {{}}
+            }}, 400);
 
             try {{
                 const res = await fetch('/api/scan', {{ method: 'POST' }});
                 const data = await res.json();
+                clearInterval(scanPollTimer);
                 if (data.success) {{
-                    showToast('Scan completed! Refreshing release feed...', 'success');
-                    setTimeout(() => {{ window.location.reload(); }}, 1200);
+                    txt.textContent = `✓ Found ${{data.count}} releases! Refreshing...`;
+                    showToast(`Scan complete! Found ${{data.count}} releases. Refreshing feed...`, 'success');
+                    setTimeout(() => {{ window.location.reload(); }}, 1000);
                 }} else {{
                     showToast('Scan error: ' + data.message, 'error');
                     btn.disabled = false;
@@ -1690,6 +1750,7 @@ def render_dashboard_page(username: str, settings: Dict[str, Any], items: List[D
                     txt.textContent = 'Scan Releases Now';
                 }}
             }} catch (e) {{
+                clearInterval(scanPollTimer);
                 showToast('Server connection error during scan.', 'error');
                 btn.disabled = false;
                 btn.className = 'btn-go';
@@ -2072,12 +2133,19 @@ async def api_scan(username: str = Depends(require_user)):
 
     async with scan_lock:
         scan_state["is_scanning"] = True
-        scan_state["progress_message"] = "Scraping releases..."
+        scan_state["items_found"] = 0
+        scan_state["progress_message"] = "Initializing scan..."
         try:
             logger.info(f"User '{username}' triggered release scan.")
-            releases = await scraper.fetch_media_index()
+
+            def _on_progress(msg: str, found_count: int):
+                scan_state["progress_message"] = msg
+                scan_state["items_found"] = found_count
+
+            releases = await scraper.fetch_media_index(progress_callback=_on_progress)
             save_cached_raw_releases(releases)
             scan_state["total_items"] = len(releases)
+            scan_state["items_found"] = len(releases)
             scan_state["is_scanning"] = False
             scan_state["progress_message"] = "Completed"
             return {"success": True, "message": f"Successfully scraped and indexed {len(releases)} releases.", "count": len(releases)}
@@ -2086,6 +2154,17 @@ async def api_scan(username: str = Depends(require_user)):
             scan_state["progress_message"] = f"Error: {e}"
             logger.error(f"Scan failed: {e}")
             return {"success": False, "message": f"Scan failed: {e}"}
+
+
+@app.get("/api/scan/status")
+async def api_scan_status():
+    """Returns live progress information for an ongoing scan."""
+    return {
+        "is_scanning": scan_state.get("is_scanning", False),
+        "message": scan_state.get("progress_message", "Idle"),
+        "found": scan_state.get("items_found", 0),
+        "total": scan_state.get("total_items", 0),
+    }
 
 
 @app.post("/api/request")

@@ -577,7 +577,7 @@ def deduplicate_and_merge(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     return list(merged_map.values())
 
 
-async def fetch_media_index() -> List[Dict[str, Any]]:
+async def fetch_media_index(progress_callback: Optional[Any] = None) -> List[Dict[str, Any]]:
     """
     Scrapes all configured media release sources (The Pirate Bay, uIndex, etc.),
     enriches them with IMDb metadata, deduplicates across sources into a unified list,
@@ -604,6 +604,9 @@ async def fetch_media_index() -> List[Dict[str, Any]]:
 
     all_raw_items: List[Dict[str, Any]] = []
 
+    if progress_callback:
+        progress_callback("Connecting to live indexers...", 0)
+
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=True)
         context = await browser.new_context(
@@ -615,11 +618,19 @@ async def fetch_media_index() -> List[Dict[str, Any]]:
         for src in sources_to_scan:
             try:
                 if src["type"] == "tpb":
+                    if progress_callback:
+                        progress_callback(f"Scraping The Pirate Bay... ({len(all_raw_items)} found)", len(all_raw_items))
                     items = await scrape_tpb(page, src["url"])
                     all_raw_items.extend(items)
+                    if progress_callback:
+                        progress_callback(f"The Pirate Bay: Found {len(all_raw_items)} releases", len(all_raw_items))
                 elif src["type"] == "uindex":
+                    if progress_callback:
+                        progress_callback(f"Scraping uIndex... ({len(all_raw_items)} found)", len(all_raw_items))
                     items = await scrape_uindex(page, src["url"])
                     all_raw_items.extend(items)
+                    if progress_callback:
+                        progress_callback(f"uIndex: Found {len(all_raw_items)} releases", len(all_raw_items))
             except Exception as e:
                 logger.error(f"Error scraping {src['name']} ({src['url']}): {e}")
 
@@ -628,7 +639,10 @@ async def fetch_media_index() -> List[Dict[str, Any]]:
         # Step 2: Enrich items with IMDb metadata & filter evaluations
         logger.info("Enriching items with IMDb metadata & filter status...")
         enriched_items = []
-        for item in all_raw_items:
+        total_raw = len(all_raw_items)
+        for idx, item in enumerate(all_raw_items):
+            if progress_callback and (idx % 3 == 0 or idx == total_raw - 1):
+                progress_callback(f"Enriching {idx + 1}/{total_raw} with IMDb metadata ({total_raw} found)...", total_raw)
             await enrich_and_filter_item(item, page=page)
             enriched_items.append(item)
 
@@ -637,6 +651,8 @@ async def fetch_media_index() -> List[Dict[str, Any]]:
     # Step 3: Deduplicate and merge across sources into a unified list
     merged_items = deduplicate_and_merge(enriched_items)
     logger.info(f"Unified into {len(merged_items)} distinct releases after smart deduplication.")
+    if progress_callback:
+        progress_callback(f"Complete! Found {len(merged_items)} releases", len(merged_items))
 
     # Save cache for web app and dashboard
     try:
