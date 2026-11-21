@@ -11,7 +11,7 @@ import json
 import logging
 import os
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 from dotenv import load_dotenv
@@ -85,6 +85,13 @@ class MediaFilter:
         # Filter criteria configuration from environment
         self.exclude_existing = os.getenv("FILTER_EXCLUDE_EXISTING", "true").lower() in ("true", "1", "yes")
         self.only_current_year = os.getenv("FILTER_ONLY_CURRENT_YEAR", "true").lower() in ("true", "1", "yes")
+        raw_tf = os.getenv("FILTER_TIMEFRAME")
+        if raw_tf:
+            self.timeframe = raw_tf.strip().lower()
+        elif not self.only_current_year:
+            self.timeframe = "all"
+        else:
+            self.timeframe = "365d"
         self.require_english = os.getenv("FILTER_REQUIRE_ENGLISH", "true").lower() in ("true", "1", "yes")
         self.target_year = int(os.getenv("FILTER_TARGET_YEAR", str(datetime.now().year)))
         self.min_imdb_score = float(os.getenv("FILTER_MIN_IMDB_SCORE", "5.0"))
@@ -233,13 +240,65 @@ class MediaFilter:
 
         return False, "English"
 
+    def check_release_date_cutoff(self, release_date_str: Optional[str], year: Optional[int]) -> Tuple[bool, str]:
+        """
+        Evaluates whether an item passes the release timeframe filter.
+        Returns (is_too_old: bool, reason: str).
+        """
+        tf = getattr(self, "timeframe", "365d").lower()
+        if tf in ("all", "any"):
+            return False, ""
+        if not getattr(self, "only_current_year", True) and tf == "year":
+            return False, ""
+
+        today = datetime.now().date()
+
+        if tf == "7d":
+            cutoff = today - timedelta(days=7)
+            label = "last 7 days"
+        elif tf == "30d":
+            cutoff = today - timedelta(days=30)
+            label = "last 30 days"
+        elif tf == "90d":
+            cutoff = today - timedelta(days=90)
+            label = "last 90 days"
+        elif tf in ("365d", "12m"):
+            cutoff = today - timedelta(days=365)
+            label = "last 12 months"
+        elif tf == "year":
+            if year is not None and year < self.target_year:
+                return True, f"Released in {year} (prior to target year {self.target_year})"
+            return False, ""
+        else:
+            if year is not None and year < self.target_year:
+                return True, f"Released in {year} (prior to target year {self.target_year})"
+            return False, ""
+
+        # Check exact US release date (YYYY-MM-DD) if available
+        if release_date_str:
+            try:
+                rel_date = datetime.strptime(str(release_date_str)[:10], "%Y-%m-%d").date()
+                if rel_date < cutoff:
+                    return True, f"US release date {rel_date} is older than {label} (cutoff: {cutoff})"
+                return False, ""
+            except Exception:
+                pass
+
+        # Fallback to year comparison if specific release date is not known
+        if year is not None:
+            if year < cutoff.year:
+                return True, f"Released in {year} (prior to {label} cutoff year {cutoff.year})"
+            return False, ""
+
+        return False, ""
+
     def evaluate(self, item: Dict[str, Any]) -> Dict[str, Any]:
         """
         Evaluate a single release item and assign a filter status:
         - 'Exists'     : Item already in Plex library
         - 'Low Score'  : IMDb rating is below configured threshold
         - 'Non-English': Foreign language release
-        - 'Too Old'    : Released before the target year
+        - 'Too Old'    : Released before the target timeframe
         - 'Consider'   : Passes all filter criteria
         """
         raw_title = item.get("title", "")
@@ -273,10 +332,13 @@ class MediaFilter:
                 status = "Non-English"
                 reason = f"Language detected as {detected_lang} (Non-English)"
 
-        # 4. Check release year
-        if status is None and self.only_current_year and year is not None and year < self.target_year:
-            status = "Too Old"
-            reason = f"Released in {year} (prior to target year {self.target_year})"
+        # 4. Check release timeframe / US release date
+        if status is None:
+            rel_date_str = item.get("release_date")
+            is_old, old_reason = self.check_release_date_cutoff(rel_date_str, year)
+            if is_old:
+                status = "Too Old"
+                reason = old_reason
 
         # 5. Default: Candidate to consider
         if status is None:

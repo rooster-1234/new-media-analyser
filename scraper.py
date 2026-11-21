@@ -7,6 +7,7 @@ import os
 import re
 import sqlite3
 import time
+from datetime import datetime
 import urllib.parse
 import urllib.request
 from typing import Any, Dict, List, Optional
@@ -268,6 +269,28 @@ async def fetch_imdb_metadata(imdb_id: str) -> Dict[str, Any]:
                 language = meta.get("language")
                 country = meta.get("country")
 
+                # Extract official US release date (ISO timestamp e.g. "2024-03-01T00:00:00.000Z")
+                raw_released = meta.get("released")
+                release_date = None
+                if raw_released:
+                    try:
+                        release_date = str(raw_released)[:10]
+                    except Exception:
+                        pass
+
+                meta_year = None
+                raw_year = meta.get("year") or meta.get("releaseInfo")
+                if raw_year:
+                    try:
+                        meta_year = int(str(raw_year)[:4])
+                    except Exception:
+                        pass
+                if not meta_year and release_date:
+                    try:
+                        meta_year = int(release_date[:4])
+                    except Exception:
+                        pass
+
                 # Fallback 1: Query local official IMDb ratings database (from datasets.imdbws.com)
                 if score == "N/A":
                     dataset_score = get_imdb_dataset_rating(imdb_id)
@@ -275,8 +298,8 @@ async def fetch_imdb_metadata(imdb_id: str) -> Dict[str, Any]:
                         score = dataset_score
                         logger.info(f"Retrieved IMDb score {score} for {imdb_id} via official IMDb dataset cache")
 
-                # Fallback 2: Query OMDb API if score is still missing from Cinemeta and API key is set
-                if score == "N/A" and OMDB_API_KEY:
+                # Fallback 2: Query OMDb API if score or release date is still missing and API key is set
+                if (score == "N/A" or not release_date) and OMDB_API_KEY:
                     try:
                         omdb_url = f"https://www.omdbapi.com/?i={imdb_id}&apikey={OMDB_API_KEY}"
                         def _get_omdb():
@@ -287,17 +310,32 @@ async def fetch_imdb_metadata(imdb_id: str) -> Dict[str, Any]:
                         if raw_omdb and is_valid_imdb_score(str(raw_omdb)):
                             score = str(raw_omdb)
                             logger.info(f"Retrieved IMDb score {score} for {imdb_id} via OMDb fallback")
+                        raw_omdb_rel = omdb_data.get("Released")
+                        if raw_omdb_rel and raw_omdb_rel != "N/A" and not release_date:
+                            try:
+                                parsed_d = datetime.strptime(raw_omdb_rel, "%d %b %Y").date()
+                                release_date = parsed_d.isoformat()
+                            except Exception:
+                                pass
                     except Exception as omdb_err:
                         logger.debug(f"OMDb fallback failed for {imdb_id}: {omdb_err}")
 
-                res = {"score": score, "genres": genres, "synopsis": synopsis, "language": language, "country": country}
-                logger.info(f"Retrieved Cinemeta metadata for {imdb_id}: score={score}, genres={genres}, lang={language}")
+                res = {
+                    "score": score,
+                    "genres": genres,
+                    "synopsis": synopsis,
+                    "language": language,
+                    "country": country,
+                    "release_date": release_date,
+                    "year": meta_year
+                }
+                logger.info(f"Retrieved Cinemeta metadata for {imdb_id}: score={score}, genres={genres}, rel_date={release_date}")
                 imdb_cache[imdb_id] = res
                 return res
         except Exception as e:
             logger.debug(f"Cinemeta lookup failed for {imdb_id} ({media_type}): {e}")
 
-    fallback = {"score": "N/A", "genres": [], "synopsis": "", "language": None, "country": None}
+    fallback = {"score": "N/A", "genres": [], "synopsis": "", "language": None, "country": None, "release_date": None, "year": None}
     imdb_cache[imdb_id] = fallback
     return fallback
 
@@ -427,6 +465,8 @@ async def enrich_and_filter_item(item: Dict[str, Any], page=None) -> Dict[str, A
     synopsis = ""
     language = None
     country = None
+    release_date = None
+    meta_year = None
 
     if imdb_id:
         meta = await fetch_imdb_metadata(imdb_id)
@@ -435,6 +475,8 @@ async def enrich_and_filter_item(item: Dict[str, Any], page=None) -> Dict[str, A
         synopsis = meta.get("synopsis", "")
         language = meta.get("language")
         country = meta.get("country")
+        release_date = meta.get("release_date")
+        meta_year = meta.get("year")
 
     item["imdb_id"] = imdb_id
     item["imdb_url"] = f"https://www.imdb.com/title/{imdb_id}" if imdb_id else "N/A"
@@ -443,6 +485,9 @@ async def enrich_and_filter_item(item: Dict[str, Any], page=None) -> Dict[str, A
     item["synopsis"] = synopsis
     item["language"] = language
     item["country"] = country
+    item["release_date"] = release_date
+    if meta_year and not item.get("year"):
+        item["year"] = meta_year
 
     # 4. Evaluate against filter criteria (.env: Exists, Low Score, Non-English, Too Old, or Consider)
     if media_filter:

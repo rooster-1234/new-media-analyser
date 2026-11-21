@@ -108,6 +108,7 @@ SITE_SCAN2=https://uindex.org/top.php?c=1&t=7d
 
 # Filter Criteria
 FILTER_EXCLUDE_EXISTING=true
+FILTER_TIMEFRAME=365d              # 7d, 30d, 90d, 365d, year, or all
 FILTER_ONLY_CURRENT_YEAR=true
 FILTER_TARGET_YEAR=2026
 FILTER_MIN_IMDB_SCORE=5.0

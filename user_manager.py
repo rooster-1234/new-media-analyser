@@ -157,6 +157,7 @@ def get_default_settings(username: str) -> Dict[str, Any]:
         "site_scan3": os.getenv("SITE_SCAN3", ""),
         # Filter Criteria
         "filter_exclude_existing": True,
+        "filter_timeframe": "365d",
         "filter_only_current_year": True,
         "filter_target_year": 2026,
         "filter_min_imdb_score": 5.0,

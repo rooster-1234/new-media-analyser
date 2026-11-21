@@ -87,7 +87,8 @@ def get_user_media_filter(username: str) -> MediaFilter:
 
     flt = MediaFilter(profile_path=profile_path)
     flt.exclude_existing = settings.get("filter_exclude_existing", True)
-    flt.only_current_year = settings.get("filter_only_current_year", True)
+    flt.timeframe = settings.get("filter_timeframe", "365d")
+    flt.only_current_year = settings.get("filter_only_current_year", True) if "filter_only_current_year" in settings else (flt.timeframe != "all")
     flt.target_year = int(settings.get("filter_target_year", 2026))
     flt.min_imdb_score = float(settings.get("filter_min_imdb_score", 5.0))
     flt.require_english = settings.get("filter_require_english", True)
@@ -173,6 +174,7 @@ class SettingsUpdateModel(BaseModel):
     site_scan2: Optional[str] = ""
     site_scan3: Optional[str] = ""
     filter_exclude_existing: Optional[bool] = True
+    filter_timeframe: Optional[str] = "365d"
     filter_only_current_year: Optional[bool] = True
     filter_target_year: Optional[int] = 2026
     filter_min_imdb_score: Optional[float] = 5.0
@@ -701,16 +703,23 @@ def render_settings_page(username: str, settings: Dict[str, Any]) -> str:
                     <input type="number" step="0.1" min="1.0" max="10.0" id="filter_min_imdb_score" value="{settings.get('filter_min_imdb_score', 5.0)}">
                 </div>
                 <div class="form-group">
+                    <label>US Release Date Timeframe</label>
+                    <select id="filter_timeframe" onchange="toggleTargetYearInput()">
+                        <option value="7d" {"selected" if settings.get("filter_timeframe") == "7d" else ""}>Within Last 7 Days (Past week)</option>
+                        <option value="30d" {"selected" if settings.get("filter_timeframe") == "30d" else ""}>Within Last 30 Days (Past month)</option>
+                        <option value="90d" {"selected" if settings.get("filter_timeframe") == "90d" else ""}>Within Last 90 Days (Past 3 months)</option>
+                        <option value="365d" {"selected" if settings.get("filter_timeframe", "365d") == "365d" else ""}>Within Last 12 Months (Past year)</option>
+                        <option value="year" {"selected" if settings.get("filter_timeframe") == "year" else ""}>Specific Release Year</option>
+                        <option value="all" {"selected" if settings.get("filter_timeframe") == "all" else ""}>Any Release Date (No cutoff)</option>
+                    </select>
+                </div>
+                <div class="form-group" id="target_year_group" style="{'display: block;' if settings.get('filter_timeframe') == 'year' else 'display: none;'}">
                     <label>Target Release Year</label>
                     <input type="number" id="filter_target_year" value="{settings.get('filter_target_year', 2026)}">
                 </div>
                 <div class="form-group" style="display: flex; align-items: center; gap: 8px;">
                     <input type="checkbox" id="filter_exclude_existing" {'checked' if settings.get('filter_exclude_existing', True) else ''}>
                     <label for="filter_exclude_existing" style="margin: 0; cursor: pointer;">Exclude titles already in library</label>
-                </div>
-                <div class="form-group" style="display: flex; align-items: center; gap: 8px;">
-                    <input type="checkbox" id="filter_only_current_year" {'checked' if settings.get('filter_only_current_year', True) else ''}>
-                    <label for="filter_only_current_year" style="margin: 0; cursor: pointer;">Filter out older releases</label>
                 </div>
                 <div class="form-group" style="display: flex; align-items: center; gap: 8px;">
                     <input type="checkbox" id="filter_require_english" {'checked' if settings.get('filter_require_english', True) else ''}>
@@ -836,7 +845,16 @@ def render_settings_page(username: str, settings: Dict[str, Any]) -> str:
             }}
         }}
 
+        function toggleTargetYearInput() {{
+            const tf = document.getElementById('filter_timeframe').value;
+            const container = document.getElementById('target_year_group');
+            if (container) {{
+                container.style.display = (tf === 'year') ? 'block' : 'none';
+            }}
+        }}
+
         async function saveAllSettings() {{
+            const tfVal = document.getElementById('filter_timeframe').value;
             const payload = {{
                 media_server: document.getElementById('media_server').value,
                 plex_url: document.getElementById('plex_url').value,
@@ -864,9 +882,10 @@ def render_settings_page(username: str, settings: Dict[str, Any]) -> str:
                 qbittorrent_save_path: document.getElementById('qbittorrent_save_path').value,
                 qbittorrent_start_now: document.getElementById('qbittorrent_start_now').checked,
                 filter_min_imdb_score: parseFloat(document.getElementById('filter_min_imdb_score').value) || 5.0,
+                filter_timeframe: tfVal,
                 filter_target_year: parseInt(document.getElementById('filter_target_year').value) || 2026,
                 filter_exclude_existing: document.getElementById('filter_exclude_existing').checked,
-                filter_only_current_year: document.getElementById('filter_only_current_year').checked,
+                filter_only_current_year: (tfVal !== 'all'),
                 filter_require_english: document.getElementById('filter_require_english').checked,
                 filter_disliked_genres: getDislikedGenres(),
             }};
@@ -982,7 +1001,15 @@ def render_dashboard_page(username: str, settings: Dict[str, Any], items: List[D
             "Low": "badge-match-low"
         }.get(genre_match, "badge-match-low")
 
-        year_str = str(item.get("year") or "-")
+        release_date = item.get("release_date") or ""
+        year_val = item.get("year") or 0
+        if release_date:
+            date_display = release_date
+        elif year_val:
+            date_display = str(year_val)
+        else:
+            date_display = "-"
+
         size_str = str(item.get("size") or "N/A")
         synopsis = item.get("synopsis", "")
         truncated = scraper.truncate_synopsis(synopsis, max_words=60)
@@ -993,7 +1020,6 @@ def render_dashboard_page(username: str, settings: Dict[str, Any], items: List[D
 
         imdb_id = item.get("imdb_id") or ""
         escaped_title = item.get("title", "").replace("'", "\\'").replace('"', '&quot;')
-        year_val = item.get("year") or 0
         magnet_str = item.get("magnet") or ""
 
         sources = item.get("sources", [])
@@ -1011,12 +1037,12 @@ def render_dashboard_page(username: str, settings: Dict[str, Any], items: List[D
         btn_html = f"<button class='btn-request' data-magnet=\"{html.escape(magnet_str)}\" onclick=\"requestMedia(this, '{imdb_id}', '{escaped_title}', {year_val})\">Request ({downloader_name})</button>"
 
         rows.append(f"""
-            <tr data-status="{html.escape(status)}" data-genre="{html.escape(genre_match)}" data-sources="{html.escape(source_keys_str)}">
+            <tr data-status="{html.escape(status)}" data-genre="{html.escape(genre_match)}" data-sources="{html.escape(source_keys_str)}" data-release-date="{html.escape(release_date)}" data-year="{year_val}">
                 <td>
                     <div class='title-main'>{title_html}</div>
                     {synopsis_html}
                 </td>
-                <td>{year_str}</td>
+                <td><span style="font-family: monospace; font-size: 13px; color: #cbd5e1;">{html.escape(date_display)}</span></td>
                 <td>{source_badge}</td>
                 <td><span class='size-text'>{html.escape(size_str)}</span></td>
                 <td>
@@ -1164,6 +1190,22 @@ def render_dashboard_page(username: str, settings: Dict[str, Any], items: List[D
         .source-pill.pill-tpb.active {{ background: rgba(245, 158, 11, 0.25); color: #fbbf24; border-color: #f59e0b; box-shadow: 0 0 8px rgba(245, 158, 11, 0.4); }}
         .source-pill.pill-uindex.active {{ background: rgba(6, 182, 212, 0.25); color: #22d3ee; border-color: #06b6d4; box-shadow: 0 0 8px rgba(6, 182, 212, 0.4); }}
         .source-pill.pill-multi.active {{ background: rgba(168, 85, 247, 0.25); color: #c084fc; border-color: #a855f7; box-shadow: 0 0 8px rgba(168, 85, 247, 0.4); }}
+
+        .timeframe-pill {{
+            background: #202020;
+            border: 1px solid #333;
+            color: #cbd5e1;
+            font-size: 12px;
+            font-weight: 600;
+            padding: 5px 13px;
+            border-radius: 9999px;
+            cursor: pointer;
+            transition: all 0.15s ease-in-out;
+            user-select: none;
+        }}
+        .timeframe-pill:hover {{ border-color: #64748b; color: #f8fafc; }}
+        .timeframe-pill.active {{ background: #059669; color: #ffffff; border-color: #10b981; box-shadow: 0 0 8px rgba(16, 185, 129, 0.4); }}
+        .filter-controls-container {{ display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }}
 
         .filter-status-info {{ margin-bottom: 16px; font-size: 13px; color: #94a3b8; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; }}
         .filter-status-info strong {{ color: #f8fafc; }}
@@ -1381,12 +1423,22 @@ def render_dashboard_page(username: str, settings: Dict[str, Any], items: List[D
         <div class="card card-genre-high" data-filter="genre:High"><div class="card-num">{genre_counts.get('High', 0)}</div><div class="card-label">High Genre Match</div></div>
     </div>
 
-    <!-- Source Filter Pills -->
-    <div class="source-filter-bar">
-        <span class="source-filter-label">Source Filter:</span>
-        <button class="source-pill active" data-source="all">All Sources ({len(items)})</button>
-        <button class="source-pill pill-tpb" data-source="tpb">Pirate Bay ({tpb_count})</button>
-        <button class="source-pill pill-uindex" data-source="uindex">uIndex ({uindex_count})</button>
+    <!-- Filter Controls (Source & Timeframe) -->
+    <div class="filter-controls-container">
+        <div class="source-filter-bar" style="margin-bottom: 0;">
+            <span class="source-filter-label">Source:</span>
+            <button class="source-pill active" data-source="all">All Sources ({len(items)})</button>
+            <button class="source-pill pill-tpb" data-source="tpb">Pirate Bay ({tpb_count})</button>
+            <button class="source-pill pill-uindex" data-source="uindex">uIndex ({uindex_count})</button>
+        </div>
+        <div class="source-filter-bar timeframe-bar" style="margin-bottom: 0;">
+            <span class="source-filter-label">US Release:</span>
+            <button class="timeframe-pill active" data-timeframe="all">All Time ({len(items)})</button>
+            <button class="timeframe-pill" data-timeframe="7d">Last 7 Days</button>
+            <button class="timeframe-pill" data-timeframe="30d">Last 30 Days</button>
+            <button class="timeframe-pill" data-timeframe="90d">Last 3 Months</button>
+            <button class="timeframe-pill" data-timeframe="365d">Last 12 Months</button>
+        </div>
     </div>
 
     <div class="filter-status-info" id="filterInfo">
@@ -1400,7 +1452,7 @@ def render_dashboard_page(username: str, settings: Dict[str, Any], items: List[D
         <thead>
             <tr>
                 <th>Title</th>
-                <th>Year</th>
+                <th>US Release</th>
                 <th>Source</th>
                 <th>Size</th>
                 <th>Genre</th>
@@ -1435,6 +1487,7 @@ def render_dashboard_page(username: str, settings: Dict[str, Any], items: List[D
     <script>
         const cards = document.querySelectorAll('.card');
         const sourcePills = document.querySelectorAll('.source-pill');
+        const timeframePills = document.querySelectorAll('.timeframe-pill');
         const rows = document.querySelectorAll('#mediaTableBody tr');
         const visibleCountSpan = document.getElementById('visibleCount');
         const resetBtn = document.getElementById('resetBtn');
@@ -1443,6 +1496,7 @@ def render_dashboard_page(username: str, settings: Dict[str, Any], items: List[D
         let currentFilterType = 'all';
         let currentFilterVal = '';
         let currentSourceFilter = 'all';
+        let currentTimeframeFilter = 'all';
         let currentActiveMagnet = '';
 
         function showToast(msg, type) {{
@@ -1540,6 +1594,22 @@ def render_dashboard_page(username: str, settings: Dict[str, Any], items: List[D
 
         function applyFilters() {{
             let visible = 0;
+            const now = new Date();
+            let cutoff = null;
+            if (currentTimeframeFilter === '7d') {{
+                cutoff = new Date();
+                cutoff.setDate(now.getDate() - 7);
+            }} else if (currentTimeframeFilter === '30d') {{
+                cutoff = new Date();
+                cutoff.setDate(now.getDate() - 30);
+            }} else if (currentTimeframeFilter === '90d') {{
+                cutoff = new Date();
+                cutoff.setDate(now.getDate() - 90);
+            }} else if (currentTimeframeFilter === '365d') {{
+                cutoff = new Date();
+                cutoff.setDate(now.getDate() - 365);
+            }}
+
             rows.forEach(r => {{
                 let matchStatus = false;
                 if (currentFilterType === 'all') {{
@@ -1558,14 +1628,28 @@ def render_dashboard_page(username: str, settings: Dict[str, Any], items: List[D
                     matchSource = rowSources.includes(currentSourceFilter.toLowerCase());
                 }}
 
-                const show = matchStatus && matchSource;
+                let matchTimeframe = true;
+                if (cutoff !== null) {{
+                    const relDateStr = r.getAttribute('data-release-date');
+                    const yearStr = r.getAttribute('data-year');
+                    if (relDateStr && relDateStr.length >= 10) {{
+                        const rowDate = new Date(relDateStr);
+                        matchTimeframe = (!isNaN(rowDate.getTime()) && rowDate >= cutoff);
+                    }} else if (yearStr && parseInt(yearStr) > 0) {{
+                        matchTimeframe = (parseInt(yearStr) >= cutoff.getFullYear());
+                    }} else {{
+                        matchTimeframe = false;
+                    }}
+                }}
+
+                const show = matchStatus && matchSource && matchTimeframe;
                 r.style.display = show ? '' : 'none';
                 if (show) visible++;
             }});
 
             visibleCountSpan.textContent = visible;
             noMatchesDiv.style.display = (visible === 0) ? 'block' : 'none';
-            const isFiltered = (currentFilterType !== 'all') || (currentSourceFilter !== 'all');
+            const isFiltered = (currentFilterType !== 'all') || (currentSourceFilter !== 'all') || (currentTimeframeFilter !== 'all');
             resetBtn.style.display = isFiltered ? 'inline-block' : 'none';
         }}
 
@@ -1573,6 +1657,7 @@ def render_dashboard_page(username: str, settings: Dict[str, Any], items: List[D
             currentFilterType = 'all';
             currentFilterVal = '';
             currentSourceFilter = 'all';
+            currentTimeframeFilter = 'all';
 
             cards.forEach(c => c.classList.remove('active'));
             const totalCard = document.querySelector('.card[data-filter="all"]');
@@ -1581,6 +1666,10 @@ def render_dashboard_page(username: str, settings: Dict[str, Any], items: List[D
             sourcePills.forEach(p => p.classList.remove('active'));
             const allPill = document.querySelector('.source-pill[data-source="all"]');
             if (allPill) allPill.classList.add('active');
+
+            timeframePills.forEach(p => p.classList.remove('active'));
+            const allTimePill = document.querySelector('.timeframe-pill[data-timeframe="all"]');
+            if (allTimePill) allTimePill.classList.add('active');
 
             applyFilters();
         }}
@@ -1632,6 +1721,27 @@ def render_dashboard_page(username: str, settings: Dict[str, Any], items: List[D
                 sourcePills.forEach(p => p.classList.remove('active'));
                 pill.classList.add('active');
                 currentSourceFilter = source;
+                applyFilters();
+            }});
+        }});
+
+        timeframePills.forEach(pill => {{
+            pill.addEventListener('click', () => {{
+                const tf = pill.getAttribute('data-timeframe') || 'all';
+                const isCurrentlyActive = pill.classList.contains('active');
+
+                if (isCurrentlyActive && tf !== 'all') {{
+                    currentTimeframeFilter = 'all';
+                    timeframePills.forEach(p => p.classList.remove('active'));
+                    const allPill = document.querySelector('.timeframe-pill[data-timeframe="all"]');
+                    if (allPill) allPill.classList.add('active');
+                    applyFilters();
+                    return;
+                }}
+
+                timeframePills.forEach(p => p.classList.remove('active'));
+                pill.classList.add('active');
+                currentTimeframeFilter = tf;
                 applyFilters();
             }});
         }});
