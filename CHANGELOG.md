@@ -8,12 +8,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Planned
+- Web Configuration GUI (/settings) for managing media server providers, scrapers, and downloader credentials.
 - Containerisation of the entire application suite using Docker and Docker Compose.
 - Automated periodic background scraping inside the containerized web service.
 - Seerr (Overseerr / Jellyseerr) integration for movie and TV media requests.
 - Sonarr integration for automated TV series tracking and downloads.
 
 ---
+
+## [0.4.0] - 2026-11-21
+
+### Added
+- **Multi-Source Scraping Pipeline (`scraper.py`)**:
+  - Added support for `uIndex.org` (`SITE_SCAN2`) running concurrently alongside The Pirate Bay (`SITE_SCAN1`).
+  - Added fast Cinemeta catalog search API integration for instant, zero-delay IMDb resolution on sites without embedded IMDb IDs.
+  - Added Playwright stealth table parsing for uIndex, extracting direct magnets, release sizes, and live seeder counts directly from the index.
+- **Unified Presentation & Smart Deduplication**:
+  - Adopted a consolidated single-table layout in `media_report.html` instead of fragmented tabs.
+  - Implemented cross-source and multi-resolution deduplication: 199 raw releases from TPB and uIndex consolidated into 125 distinct films.
+  - Added **Source** column with color-coded badges (`TPB`, `uIndex`, and purple `TPB + uIndex` multi-source badge).
+  - Added 1-click **Source Filter Pills** (`All Sources`, `Pirate Bay`, `uIndex`, `Both Sources`) that combine seamlessly with existing status cards and genre match filters.
+  - Made the library status badge dynamic (`In Plex`, `In Jellyfin`, `In Emby`, or `In Library`) matching `MEDIA_SERVER`.
 
 ## [0.3.0] - 2026-11-21
 

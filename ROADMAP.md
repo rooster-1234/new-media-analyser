@@ -4,12 +4,14 @@ This document outlines the planned milestones, upcoming features, and technical 
 
 ---
 
-## Current Status (v0.2.0)
+## Current Status (v0.4.0)
 - [x] **Plex Library Analyzer**: Complete catalog analysis, genre preference extraction, director tracking, and title indexing.
 - [x] **Plex OAuth PIN Flow**: 1-click browser sign-in and automatic local server discovery (`NAS`).
-- [x] **Playwright Media Scraper**: Stealth scraping of top new releases with Cinemeta and IMDb datasets cache.
+- [x] **Multi-Server Provider Engine**: Pluggable providers for **Plex**, **Jellyfin**, and **Emby** (`media_servers.py`) with single-server and combined modes.
+- [x] **Multi-Source Scraping Pipeline**: Concurrent stealth scraping of **The Pirate Bay** (`SITE_SCAN1`) and **uIndex.org** (`SITE_SCAN2`) with fast Cinemeta catalog lookup.
+- [x] **Smart Cross-Source Deduplication**: Merges multi-source entries and multi-resolution releases into a unified candidate list (199 raw releases -> 125 distinct items).
+- [x] **Unified Interactive Dashboard**: Consolidated table layout in `media_report.html` with source badges (`TPB`, `uIndex`, `TPB + uIndex`), 1-click source filter pills, dynamic library badges (`In Plex`/`In Jellyfin`/`In Emby`), and 1-click downloader request buttons.
 - [x] **Match & Filter Engine**: Intelligent preference weighting (High/Medium/Low), duplicate suppression, score & year thresholds.
-- [x] **Interactive Dashboard**: Static HTML report (`media_report.html`) with live filtering, search, and release size display.
 - [x] **Media Download Dispatcher**: 
   - [x] Radarr v3 integration (movie lookup, quality profile selection, root folder discovery).
   - [x] ruTorrent integration (direct magnet dispatch via HTTP Basic Auth, automatic start handling).

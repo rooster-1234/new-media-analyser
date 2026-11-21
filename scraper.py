@@ -14,7 +14,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 from playwright.async_api import async_playwright
 from playwright_stealth import Stealth
-from filter import MediaFilter
+from filter import MediaFilter, parse_release_title_and_year, normalize_title
 from retrieve_media import get_downloader
 from plex_analyzer import plex_oauth_login, PlexLibraryAnalyzer
 
@@ -26,6 +26,9 @@ logger = logging.getLogger(__name__)
 load_dotenv()
 
 SITE_SCAN = os.getenv("SITE_SCAN")
+SITE_SCAN1 = os.getenv("SITE_SCAN1") or SITE_SCAN or "https://thepiratebay.org/search.php?q=top100:48h_207"
+SITE_SCAN2 = os.getenv("SITE_SCAN2") or "https://uindex.org/top.php?c=1&t=7d"
+SITE_SCAN3 = os.getenv("SITE_SCAN3")
 OUTPUT_DIR = os.getenv("OUTPUT_DIR") or os.path.join(os.path.dirname(os.path.abspath(__file__)), "output")
 MAX_SYNOPSIS_WORDS = int(os.getenv("MAX_SYNOPSIS_WORDS", "60"))
 OMDB_API_KEY = os.getenv("OMDB_API_KEY", "").strip()
@@ -190,6 +193,45 @@ def extract_imdb_score_from_text(text: str) -> str:
     return "N/A"
 
 
+async def search_cinemeta_imdb_id(title: str, year: Optional[int] = None) -> Optional[str]:
+    """
+    Resolves IMDb ID (tt...) for a movie/series title using Cinemeta search catalog.
+    Matches closest title and release year.
+    """
+    if not title:
+        return None
+    loop = asyncio.get_running_loop()
+    clean_query = title.strip()
+    encoded = urllib.parse.quote(clean_query)
+
+    for mtype in ("movie", "series"):
+        try:
+            url = f"https://v3-cinemeta.strem.io/catalog/{mtype}/top/search={encoded}.json"
+            req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+
+            def _fetch(request=req):
+                with urllib.request.urlopen(request, timeout=3) as resp:
+                    return json.loads(resp.read().decode("utf-8"))
+
+            data = await loop.run_in_executor(None, _fetch)
+            metas = data.get("metas", []) if isinstance(data, dict) else []
+            for m in metas:
+                m_year = m.get("releaseInfo") or m.get("year")
+                if year and m_year:
+                    try:
+                        if abs(int(str(m_year)[:4]) - int(year)) <= 1:
+                            return m.get("id")
+                    except Exception:
+                        pass
+                else:
+                    return m.get("id")
+            if metas:
+                return metas[0].get("id")
+        except Exception as e:
+            logger.debug(f"Cinemeta search failed for '{title}' ({mtype}): {e}")
+    return None
+
+
 async def fetch_imdb_metadata(imdb_id: str) -> Dict[str, Any]:
     """
     Fetches official IMDb rating, genres, and synopsis for a tt ID using Cinemeta JSON metadata API.
@@ -266,171 +308,291 @@ async def fetch_imdb_score(imdb_id: str) -> str:
     return meta.get("score", "N/A")
 
 
-async def fetch_media_index() -> List[Dict[str, str]]:
-    """
-    Scrapes the media index site, extracts release links, and retrieves IMDb scores.
-    """
-    ensure_plex_profile()
+async def scrape_tpb(page, url: str) -> List[Dict[str, Any]]:
+    """Scrapes release listings from The Pirate Bay."""
+    logger.info(f"Navigating to The Pirate Bay: {url}...")
+    try:
+        await page.goto(url, wait_until="domcontentloaded", timeout=45000)
+        await page.wait_for_load_state("networkidle")
+        await page.wait_for_selector("#torrents", timeout=15000)
+    except Exception as e:
+        logger.warning(f"Could not load TPB #torrents table: {e}")
+        return []
 
-    if not SITE_SCAN:
-        logger.error("SITE_SCAN environment variable is not set.")
-        return [{"error": "SITE_SCAN variable missing in .env"}]
+    entries = await page.query_selector_all("#torrents li.list-entry")
+    results = []
+    for entry in entries:
+        title_el = await entry.query_selector(".item-title a, a[href^='/description.php?id=']")
+        if not title_el:
+            continue
+        raw_title = (await title_el.inner_text()).strip()
+        href = await title_el.get_attribute("href")
+        size_el = await entry.query_selector(".item-size, span[class*='size']")
+        size_text = (await size_el.inner_text()).replace("\xa0", " ").strip() if size_el else "N/A"
+        mag_el = await entry.query_selector("a[href^='magnet:']")
+        magnet = (await mag_el.get_attribute("href")) if mag_el else ""
+        clean_title, year = parse_release_title_and_year(raw_title)
+
+        results.append({
+            "source": "TPB",
+            "source_key": "tpb",
+            "title": raw_title,
+            "clean_title": clean_title,
+            "year": year,
+            "size": size_text,
+            "magnet": magnet,
+            "href": href,
+            "seeders": 0,
+        })
+    logger.info(f"The Pirate Bay: parsed {len(results)} releases.")
+    return results
+
+
+async def scrape_uindex(page, url: str) -> List[Dict[str, Any]]:
+    """Scrapes release listings from uIndex.org."""
+    logger.info(f"Navigating to uIndex: {url}...")
+    try:
+        await page.goto(url, wait_until="domcontentloaded", timeout=45000)
+        await page.wait_for_timeout(1000)
+        rows = await page.locator("table tr").all()
+    except Exception as e:
+        logger.warning(f"Could not load uIndex table: {e}")
+        return []
+
+    results = []
+    for row in rows[1:]:
+        cols = await row.locator("td").all()
+        if len(cols) < 4:
+            continue
+        title_el = row.locator("a[href*='details.php']")
+        if await title_el.count() == 0:
+            continue
+        raw_title = (await title_el.first.inner_text()).strip()
+        href = await title_el.first.get_attribute("href")
+        mag_el = row.locator("a[href^='magnet:']")
+        magnet = await mag_el.first.get_attribute("href") if await mag_el.count() > 0 else ""
+        size_text = (await cols[3].inner_text()).strip() if len(cols) > 3 else "N/A"
+        seeders_str = (await cols[5].inner_text()).strip().replace(",", "") if len(cols) > 5 else "0"
+        seeders = int(seeders_str) if seeders_str.isdigit() else 0
+        clean_title, year = parse_release_title_and_year(raw_title)
+
+        results.append({
+            "source": "uIndex",
+            "source_key": "uindex",
+            "title": raw_title,
+            "clean_title": clean_title,
+            "year": year,
+            "size": size_text,
+            "magnet": magnet,
+            "href": href,
+            "seeders": seeders,
+        })
+    logger.info(f"uIndex: parsed {len(results)} releases.")
+    return results
+
+
+async def enrich_and_filter_item(item: Dict[str, Any], page=None) -> Dict[str, Any]:
+    """
+    Enriches release item with IMDb ID, scores, genres, and synopsis,
+    then evaluates against media server library and filter rules.
+    """
+    clean_title = item.get("clean_title") or item.get("title", "")
+    year = item.get("year")
+    imdb_id = item.get("imdb_id")
+
+    # 1. Resolve IMDb ID via Cinemeta search if not already present
+    if not imdb_id or imdb_id == "N/A":
+        imdb_id = await search_cinemeta_imdb_id(clean_title, year)
+
+    # 2. If TPB item still has no IMDb ID and page is provided, check detail page as fallback
+    if not imdb_id and page and item.get("source") == "TPB" and item.get("href"):
+        try:
+            detail_url = urllib.parse.urljoin("https://thepiratebay.org", item["href"])
+            await page.goto(detail_url, wait_until="domcontentloaded", timeout=12000)
+            content = await page.content()
+            m = re.search(r'imdb\.com/title/(tt\d+)', content) or re.search(r'(?i)IMDb[:\s]+(tt\d+)', content)
+            if m:
+                imdb_id = m.group(1)
+            # Refine magnet / size if missing
+            if not item.get("magnet"):
+                mag_detail = await page.query_selector("a[href^='magnet:']")
+                if mag_detail:
+                    item["magnet"] = await mag_detail.get_attribute("href")
+        except Exception:
+            pass
+
+    # 3. Retrieve metadata via Cinemeta and fallbacks
+    score = "N/A"
+    genres = []
+    synopsis = ""
+    language = None
+    country = None
+
+    if imdb_id:
+        meta = await fetch_imdb_metadata(imdb_id)
+        score = meta.get("score", "N/A")
+        genres = meta.get("genres", [])
+        synopsis = meta.get("synopsis", "")
+        language = meta.get("language")
+        country = meta.get("country")
+
+    item["imdb_id"] = imdb_id
+    item["imdb_url"] = f"https://www.imdb.com/title/{imdb_id}" if imdb_id else "N/A"
+    item["imdb_score"] = score
+    item["genres"] = genres
+    item["synopsis"] = synopsis
+    item["language"] = language
+    item["country"] = country
+
+    # 4. Evaluate against filter criteria (.env: Exists, Low Score, Non-English, Too Old, or Consider)
+    if media_filter:
+        media_filter.evaluate(item)
+    else:
+        item["filter_status"] = "Consider"
+        item["genre_match"] = "Low"
+
+    return item
+
+
+def deduplicate_and_merge(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """
+    Merges duplicate releases across sources (and different resolutions of the same title)
+    into a unified list. Combines source badges, preserves the best magnet link and download size.
+    """
+    merged_map: Dict[str, Dict[str, Any]] = {}
+
+    for item in items:
+        imdb_id = item.get("imdb_id")
+        clean_title = item.get("clean_title") or item.get("title", "")
+        year = item.get("year")
+
+        if imdb_id and imdb_id != "N/A" and str(imdb_id).startswith("tt"):
+            key = imdb_id
+        else:
+            key = f"{normalize_title(clean_title)}_{year or ''}"
+
+        source_name = item.get("source", "Unknown")
+        source_key = item.get("source_key", source_name.lower())
+
+        if key not in merged_map:
+            item["sources"] = [source_name]
+            item["source_keys"] = [source_key]
+            item["source_details"] = {
+                source_name: {
+                    "raw_title": item.get("title", ""),
+                    "size": item.get("size", "N/A"),
+                    "magnet": item.get("magnet", ""),
+                    "seeders": item.get("seeders", 0),
+                    "href": item.get("href", "")
+                }
+            }
+            merged_map[key] = item
+        else:
+            existing = merged_map[key]
+            if source_name not in existing["sources"]:
+                existing["sources"].append(source_name)
+            if source_key not in existing["source_keys"]:
+                existing["source_keys"].append(source_key)
+
+            existing["source_details"][source_name] = {
+                "raw_title": item.get("title", ""),
+                "size": item.get("size", "N/A"),
+                "magnet": item.get("magnet", ""),
+                "seeders": item.get("seeders", 0),
+                "href": item.get("href", "")
+            }
+
+            # Select best magnet (if existing has no magnet, or new item has more seeders)
+            new_seeders = item.get("seeders", 0)
+            existing_seeders = existing.get("seeders", 0)
+            if not existing.get("magnet") and item.get("magnet"):
+                existing["magnet"] = item["magnet"]
+            elif item.get("magnet") and new_seeders > existing_seeders:
+                existing["magnet"] = item["magnet"]
+                existing["seeders"] = new_seeders
+
+            # If new item is 1080p and existing was 720p, prefer 1080p size
+            existing_size = existing.get("size", "N/A")
+            new_size = item.get("size", "N/A")
+            if "1080p" in item.get("title", "") and "1080p" not in existing.get("title", ""):
+                existing["size"] = new_size
+            elif existing_size in ("N/A", "") and new_size not in ("N/A", ""):
+                existing["size"] = new_size
+
+            # Keep richer metadata if missing in existing
+            if existing.get("imdb_score") in ("N/A", "") and item.get("imdb_score") not in ("N/A", ""):
+                existing["imdb_score"] = item["imdb_score"]
+                existing["imdb_id"] = item.get("imdb_id")
+                existing["imdb_url"] = item.get("imdb_url")
+            if not existing.get("genres") and item.get("genres"):
+                existing["genres"] = item["genres"]
+            if not existing.get("synopsis") and item.get("synopsis"):
+                existing["synopsis"] = item["synopsis"]
+
+    return list(merged_map.values())
+
+
+async def fetch_media_index() -> List[Dict[str, Any]]:
+    """
+    Scrapes all configured media release sources (The Pirate Bay, uIndex, etc.),
+    enriches them with IMDb metadata, deduplicates across sources into a unified list,
+    and returns categorized releases.
+    """
+    ensure_media_profile()
+
+    sources_to_scan = []
+    s1 = os.getenv("SITE_SCAN1") or os.getenv("SITE_SCAN")
+    if s1:
+        sources_to_scan.append({"name": "TPB", "type": "tpb", "url": s1})
+
+    s2 = os.getenv("SITE_SCAN2")
+    if s2:
+        sources_to_scan.append({"name": "uIndex", "type": "uindex", "url": s2})
+
+    s3 = os.getenv("SITE_SCAN3")
+    if s3 and "ext.to" not in s3:  # ext.to is handled if unblocked
+        sources_to_scan.append({"name": "ext", "type": "ext", "url": s3})
+
+    if not sources_to_scan:
+        logger.error("No valid SITE_SCAN or SITE_SCAN1/SITE_SCAN2 sources configured in .env.")
+        return [{"error": "No scan sources configured in .env"}]
+
+    all_raw_items: List[Dict[str, Any]] = []
 
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=True)
         context = await browser.new_context(
-            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36"
+            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
         )
         page = await context.new_page()
         await Stealth().apply_stealth_async(page)
 
-        try:
-            logger.info(f"Navigating to {SITE_SCAN}...")
-            await page.goto(SITE_SCAN, wait_until="domcontentloaded", timeout=60000)
-            await page.wait_for_load_state("networkidle")
-
-            logger.info(f"Page Title: {await page.title()}")
-
-            # Wait for primary results table
+        for src in sources_to_scan:
             try:
-                await page.wait_for_selector("#torrents", timeout=20000)
+                if src["type"] == "tpb":
+                    items = await scrape_tpb(page, src["url"])
+                    all_raw_items.extend(items)
+                elif src["type"] == "uindex":
+                    items = await scrape_uindex(page, src["url"])
+                    all_raw_items.extend(items)
             except Exception as e:
-                logger.warning("Timeout reached for #torrents. Saving debug page content.")
-                content = await page.content()
-                with open(os.path.join(OUTPUT_DIR, "debug_page_content_final.html"), "w", encoding="utf-8") as f:
-                    f.write(content)
-                raise e
+                logger.error(f"Error scraping {src['name']} ({src['url']}): {e}")
 
-            await asyncio.sleep(1)
+        logger.info(f"Total raw releases collected across {len(sources_to_scan)} sources: {len(all_raw_items)}")
 
-            # Extract release links and download sizes from search results table
-            entries = await page.query_selector_all("#torrents li.list-entry")
-            results = []
-            if entries:
-                for entry in entries:
-                    title_el = await entry.query_selector(".item-title a, a[href^='/description.php?id=']")
-                    if not title_el:
-                        continue
-                    title = (await title_el.inner_text()).strip()
-                    href = await title_el.get_attribute("href")
-                    size_el = await entry.query_selector(".item-size, span[class*='size']")
-                    size_text = (await size_el.inner_text()).replace("\xa0", " ").strip() if size_el else "N/A"
-                    mag_el = await entry.query_selector("a[href^='magnet:']")
-                    magnet = (await mag_el.get_attribute("href")) if mag_el else ""
-                    if title and href:
-                        results.append({"title": title, "href": href, "size": size_text, "magnet": magnet})
-            else:
-                links = await page.query_selector_all("#torrents a[href^='/description.php?id=']")
-                for link in links:
-                    title = await link.inner_text()
-                    href = await link.get_attribute("href")
-                    if title.strip() and href:
-                        results.append({"title": title.strip(), "href": href, "size": "N/A", "magnet": ""})
+        # Step 2: Enrich items with IMDb metadata & filter evaluations
+        logger.info("Enriching items with IMDb metadata & filter status...")
+        enriched_items = []
+        for item in all_raw_items:
+            await enrich_and_filter_item(item, page=page)
+            enriched_items.append(item)
 
-            logger.info(f"Found {len(results)} potential result links.")
+        await browser.close()
 
-            if not results:
-                logger.warning("No results were extracted using the primary link selector.")
-                return results
-
-            # Deep scrape each release for its IMDb link and score
-            logger.info(f"Starting deep scrape for {len(results)} items...")
-            for item in results:
-                detail_url = urllib.parse.urljoin(SITE_SCAN, item["href"])
-
-                try:
-                    await page.goto(detail_url, wait_until="domcontentloaded", timeout=20000, referer=SITE_SCAN)
-                    page_content = await page.content()
-
-                    # Fallback/refine size from detail page if missing
-                    if not item.get("size") or item.get("size") == "N/A":
-                        size_detail_el = await page.query_selector("#size")
-                        if size_detail_el:
-                            raw_size = (await size_detail_el.inner_text()).replace("\xa0", " ").strip()
-                            m_size = re.search(r'([\d.]+\s*(?:GiB|MiB|KiB|GB|MB|KB))', raw_size, re.IGNORECASE)
-                            if m_size:
-                                item["size"] = m_size.group(1).strip()
-
-                    # Fallback/refine magnet from detail page if missing
-                    if not item.get("magnet"):
-                        detail_mag = await page.query_selector("a[href^='magnet:']")
-                        if detail_mag:
-                            item["magnet"] = await detail_mag.get_attribute("href")
-
-                    # Find IMDb ID (e.g., tt1234567) from link or text
-                    imdb_match = re.search(r'imdb\.com/title/(tt\d+)', page_content) or re.search(r"(?i)IMDb[:\s]+(tt\d+)", page_content)
-                    imdb_id = imdb_match.group(1) if imdb_match else None
-
-                    # Score, Genre & Synopsis resolution: 1) Fast Cinemeta API, 2) Fallback to text in description
-                    score = "N/A"
-                    genres = []
-                    synopsis = ""
-                    language = None
-                    country = None
-                    if imdb_id:
-                        meta = await fetch_imdb_metadata(imdb_id)
-                        score = meta.get("score", "N/A")
-                        genres = meta.get("genres", [])
-                        synopsis = meta.get("synopsis", "")
-                        language = meta.get("language")
-                        country = meta.get("country")
-
-                    if score == "N/A":
-                        score = extract_imdb_score_from_text(page_content)
-
-                    # Text fallback for genres if missing from Cinemeta
-                    if not genres:
-                        genre_match = re.search(r'(?:Genre|Genres|Category)\s*[:|-]\s*([^\n\r<]+)', page_content, re.IGNORECASE)
-                        if genre_match:
-                            raw_genres = genre_match.group(1).strip()
-                            extracted = [g.strip() for g in re.split(r"[,/|]", raw_genres) if g.strip()]
-                            genres = [g for g in extracted if len(g) < 25 and not any(ch in g for ch in "<>{}[]")]
-
-                    # Text fallback for synopsis if missing from Cinemeta
-                    if not synopsis:
-                        plot_match = re.search(r'(?:Plot|Synopsis|Storyline|Description)\s*[:|-]\s*([^\n\r<]+)', page_content, re.IGNORECASE)
-                        if plot_match:
-                            candidate = plot_match.group(1).strip()
-                            if len(candidate) > 20 and not any(x in candidate for x in ["http", "www", "<html>"]):
-                                synopsis = candidate
-
-                    item["imdb_id"] = imdb_id
-                    item["imdb_url"] = f"https://www.imdb.com/title/{imdb_id}" if imdb_id else "N/A"
-                    item["imdb_score"] = score
-                    item["genres"] = genres
-                    item["synopsis"] = synopsis
-                    item["language"] = language
-                    item["country"] = country
-                    item["page_content"] = page_content
-
-                    # Apply filter criteria (.env: Exists, Low Score, Non-English, Too Old, or Consider)
-                    media_filter.evaluate(item)
-
-                    logger.info(
-                        f"Scraped: {item.get('clean_title', item['title'])} ({item.get('year')}) | "
-                        f"IMDb: {item['imdb_score']} | Genre Match: {item.get('genre_match')} | Status: {item['filter_status']}"
-                    )
-
-                except Exception as e:
-                    logger.warning(f"Failed to scrape details for {item['title']}: {e}")
-                    item["imdb_id"] = None
-                    item["imdb_url"] = "N/A"
-                    item["imdb_score"] = "N/A"
-                    item["genres"] = []
-                    item["synopsis"] = ""
-                    item["language"] = None
-                    item["country"] = None
-                    media_filter.evaluate(item)
-
-            logger.info(f"Successfully completed deep scrape of {len(results)} items.")
-            return results
-
-        except Exception as e:
-            logger.error(f"Error during scraping: {str(e)}")
-            return [{"error": str(e)}]
-
-        finally:
-            await browser.close()
+    # Step 3: Deduplicate and merge across sources into a unified list
+    merged_items = deduplicate_and_merge(enriched_items)
+    logger.info(f"Unified into {len(merged_items)} distinct releases after smart deduplication.")
+    return merged_items
 
 
 def truncate_synopsis(text: str, max_words: int = MAX_SYNOPSIS_WORDS) -> str:
@@ -451,12 +613,28 @@ def sanitize_output(raw_data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
             sanitized.append(item)
             continue
         clean_title = item.get("clean_title") or item["title"].replace("Pirate", "Source").replace("Torrent", "File")
+        sources = item.get("sources", ["TPB"])
+        source_keys = item.get("source_keys", [s.lower() for s in sources])
+
+        if len(sources) > 1:
+            source_display = " + ".join(sources)
+        elif sources and sources[0] == "TPB":
+            source_display = "Pirate Bay"
+        elif sources:
+            source_display = sources[0]
+        else:
+            source_display = "Unknown"
+
         sanitized.append({
             "title": clean_title,
             "raw_title": item.get("title", ""),
             "year": item.get("year"),
             "size": item.get("size", "N/A"),
             "magnet": item.get("magnet", ""),
+            "sources": sources,
+            "source_keys": source_keys,
+            "source_display": source_display,
+            "seeders": item.get("seeders", 0),
             "imdb_id": item.get("imdb_id"),
             "imdb_url": item.get("imdb_url", "N/A"),
             "imdb_score": item.get("imdb_score", "N/A"),
@@ -473,7 +651,7 @@ def sanitize_output(raw_data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
 
 
 def generate_html(data: List[Dict[str, Any]], file_path: str):
-    """Generate dark-themed HTML report table with filter status column, download size, and request buttons."""
+    """Generate dark-themed HTML report table with unified sources, filter status column, download size, and request buttons."""
     downloader = get_downloader()
     client_raw = (downloader.name or "radarr").lower()
     downloader_name = {
@@ -485,6 +663,17 @@ def generate_html(data: List[Dict[str, Any]], file_path: str):
         "rutorrent": "ruTorrent",
     }.get(client_raw, client_raw.capitalize())
 
+    # Detect media server display name
+    media_server_type = os.getenv("MEDIA_SERVER", "plex").strip().lower()
+    server_display_names = {
+        "plex": "Plex",
+        "jellyfin": "Jellyfin",
+        "emby": "Emby",
+        "all": "Library"
+    }
+    server_name = server_display_names.get(media_server_type, "Media Server")
+    in_server_label = f"In {server_name}"
+
     # Compute summary counts
     counts = {"Consider": 0, "Exists": 0, "Too Old": 0, "Low Score": 0, "Non-English": 0}
     genre_counts = {"High": 0, "Medium": 0, "Low": 0}
@@ -493,6 +682,23 @@ def generate_html(data: List[Dict[str, Any]], file_path: str):
         counts[st] = counts.get(st, 0) + 1
         gm = item.get("genre_match", "Low")
         genre_counts[gm] = genre_counts.get(gm, 0) + 1
+
+    # Compute source counts
+    tpb_count = sum(1 for x in data if "tpb" in x.get("source_keys", []))
+    uindex_count = sum(1 for x in data if "uindex" in x.get("source_keys", []))
+    multi_count = sum(1 for x in data if len(x.get("sources", [])) > 1)
+
+    multi_pill_html = f'<button class="source-pill pill-multi" data-source="multi">Both Sources ({multi_count})</button>' if multi_count > 0 else ''
+
+    source_pills_html = f"""
+    <div class="source-filter-bar">
+        <span class="source-filter-label">Source Filter:</span>
+        <button class="source-pill active" data-source="all">All Sources ({len(data)})</button>
+        <button class="source-pill pill-tpb" data-source="tpb">Pirate Bay ({tpb_count})</button>
+        <button class="source-pill pill-uindex" data-source="uindex">uIndex ({uindex_count})</button>
+        {multi_pill_html}
+    </div>
+    """
 
     rows = []
     for item in data:
@@ -538,15 +744,29 @@ def generate_html(data: List[Dict[str, Any]], file_path: str):
         year_val = item.get("year") or 0
         magnet_str = item.get("magnet") or ""
 
+        # Source badge formatting
+        sources = item.get("sources", [])
+        source_keys_str = ",".join(item.get("source_keys", ["tpb"]))
+
+        if len(sources) > 1:
+            source_badge = f"<span class='badge badge-source-multi' title='Available on {html.escape(', '.join(sources))}'>TPB + uIndex</span>"
+        elif "uIndex" in sources or "uindex" in source_keys_str:
+            source_badge = "<span class='badge badge-source-uindex'>uIndex</span>"
+        elif "TPB" in sources or "tpb" in source_keys_str:
+            source_badge = "<span class='badge badge-source-tpb'>TPB</span>"
+        else:
+            source_badge = f"<span class='badge badge-source-other'>{html.escape(item.get('source_display', 'Unknown'))}</span>"
+
         btn_html = f"<button class='btn-request' data-magnet=\"{html.escape(magnet_str)}\" onclick=\"requestMedia(this, '{imdb_id}', '{escaped_title}', {year_val})\">Request</button>"
 
         rows.append(f"""
-                <tr data-status="{html.escape(status)}" data-genre="{html.escape(genre_match)}">
+                <tr data-status="{html.escape(status)}" data-genre="{html.escape(genre_match)}" data-sources="{html.escape(source_keys_str)}">
                     <td>
                         <div class='title-main'>{title_html}</div>
                         {synopsis_html}
                     </td>
                     <td>{year_str}</td>
+                    <td>{source_badge}</td>
                     <td><span class='size-text'>{html.escape(size_str)}</span></td>
                     <td>
                         <span class='badge {genre_badge_cls}' title='{genre_reason}'>{genre_match}</span>
@@ -566,7 +786,7 @@ def generate_html(data: List[Dict[str, Any]], file_path: str):
         body {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background: #121212; color: #e0e0e0; padding: 25px; margin: 0; }}
         h1 {{ margin-top: 0; color: #f8fafc; font-size: 24px; }}
         .header-row {{ display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; margin-bottom: 8px; }}
-        .summary-bar {{ display: flex; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }}
+        .summary-bar {{ display: flex; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; }}
         .card {{ 
             background: #1e1e1e; 
             border: 1px solid #333; 
@@ -600,6 +820,67 @@ def generate_html(data: List[Dict[str, Any]], file_path: str):
         .card-genre-high .card-num {{ color: #c084fc; }}
         .card-genre-high.active {{ border-color: #c084fc; box-shadow: 0 0 12px rgba(192, 132, 252, 0.35); background: rgba(168, 85, 247, 0.12); }}
         
+        /* Source Filter Bar & Pills */
+        .source-filter-bar {{ 
+            display: flex; 
+            align-items: center; 
+            gap: 8px; 
+            margin-bottom: 16px; 
+            flex-wrap: wrap; 
+            background: #181818; 
+            padding: 8px 14px; 
+            border-radius: 8px; 
+            border: 1px solid #282828; 
+        }}
+        .source-filter-label {{ 
+            font-size: 11px; 
+            font-weight: 700; 
+            color: #94a3b8; 
+            text-transform: uppercase; 
+            letter-spacing: 0.5px; 
+            margin-right: 4px; 
+        }}
+        .source-pill {{ 
+            background: #202020; 
+            border: 1px solid #333; 
+            color: #cbd5e1; 
+            font-size: 12px; 
+            font-weight: 600; 
+            padding: 5px 13px; 
+            border-radius: 9999px; 
+            cursor: pointer; 
+            transition: all 0.15s ease-in-out; 
+            user-select: none; 
+        }}
+        .source-pill:hover {{ 
+            border-color: #64748b; 
+            color: #f8fafc; 
+        }}
+        .source-pill.active {{ 
+            background: #2563eb; 
+            color: #ffffff; 
+            border-color: #3b82f6; 
+            box-shadow: 0 0 8px rgba(37, 99, 235, 0.4); 
+        }}
+        .source-pill.pill-tpb.active {{ 
+            background: rgba(245, 158, 11, 0.25); 
+            color: #fbbf24; 
+            border-color: #f59e0b; 
+            box-shadow: 0 0 8px rgba(245, 158, 11, 0.4); 
+        }}
+        .source-pill.pill-uindex.active {{ 
+            background: rgba(6, 182, 212, 0.25); 
+            color: #22d3ee; 
+            border-color: #06b6d4; 
+            box-shadow: 0 0 8px rgba(6, 182, 212, 0.4); 
+        }}
+        .source-pill.pill-multi.active {{ 
+            background: rgba(168, 85, 247, 0.25); 
+            color: #c084fc; 
+            border-color: #a855f7; 
+            box-shadow: 0 0 8px rgba(168, 85, 247, 0.4); 
+        }}
+
         .filter-status-info {{ margin-bottom: 16px; font-size: 13px; color: #94a3b8; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; }}
         .filter-status-info strong {{ color: #f8fafc; }}
         .reset-filter-btn {{ display: none; background: #262626; border: 1px solid #444; color: #38bdf8; padding: 2px 8px; border-radius: 4px; font-size: 11px; cursor: pointer; }}
@@ -629,7 +910,7 @@ def generate_html(data: List[Dict[str, Any]], file_path: str):
         .synopsis-text {{ font-size: 12px; color: #94a3b8; margin-top: 5px; line-height: 1.45; max-width: 440px; }}
         .size-text {{ font-size: 13px; color: #cbd5e1; font-weight: 500; font-variant-numeric: tabular-nums; white-space: nowrap; }}
         .score {{ font-weight: 600; color: #f8fafc; }}
-        .badge {{ display: inline-block; padding: 4px 10px; border-radius: 9999px; font-size: 12px; font-weight: 600; text-align: center; }}
+        .badge {{ display: inline-block; padding: 4px 10px; border-radius: 9999px; font-size: 12px; font-weight: 600; text-align: center; white-space: nowrap; }}
         .badge-consider {{ background: rgba(34, 197, 94, 0.18); color: #4ade80; border: 1px solid rgba(34, 197, 94, 0.4); }}
         .badge-exists {{ background: rgba(59, 130, 246, 0.18); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.4); }}
         .badge-old {{ background: rgba(245, 158, 11, 0.18); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.4); }}
@@ -638,6 +919,13 @@ def generate_html(data: List[Dict[str, Any]], file_path: str):
         .badge-match-high {{ background: rgba(168, 85, 247, 0.18); color: #c084fc; border: 1px solid rgba(168, 85, 247, 0.4); }}
         .badge-match-medium {{ background: rgba(56, 189, 248, 0.18); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.4); }}
         .badge-match-low {{ background: rgba(148, 163, 184, 0.15); color: #94a3b8; border: 1px solid rgba(148, 163, 184, 0.3); }}
+
+        /* Source Badges */
+        .badge-source-tpb {{ background: rgba(245, 158, 11, 0.16); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.35); }}
+        .badge-source-uindex {{ background: rgba(6, 182, 212, 0.16); color: #22d3ee; border: 1px solid rgba(6, 182, 212, 0.35); }}
+        .badge-source-multi {{ background: rgba(168, 85, 247, 0.18); color: #c084fc; border: 1px solid rgba(168, 85, 247, 0.45); font-weight: 700; }}
+        .badge-source-other {{ background: rgba(148, 163, 184, 0.16); color: #cbd5e1; border: 1px solid rgba(148, 163, 184, 0.35); }}
+
         .genre-subtext {{ font-size: 11px; color: #94a3b8; margin-top: 4px; max-width: 220px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }}
         .no-matches {{ display: none; text-align: center; padding: 30px; color: #94a3b8; font-style: italic; }}
 
@@ -739,12 +1027,15 @@ def generate_html(data: List[Dict[str, Any]], file_path: str):
     <div class="summary-bar">
         <div class="card active" data-filter="all"><div class="card-num">{len(data)}</div><div class="card-label">Total</div></div>
         <div class="card card-consider" data-filter="status:Consider"><div class="card-num">{counts.get('Consider', 0)}</div><div class="card-label">Consider</div></div>
-        <div class="card card-exists" data-filter="status:Exists"><div class="card-num">{counts.get('Exists', 0)}</div><div class="card-label">In Plex</div></div>
+        <div class="card card-exists" data-filter="status:Exists"><div class="card-num">{counts.get('Exists', 0)}</div><div class="card-label">{in_server_label}</div></div>
         <div class="card card-low" data-filter="status:Low Score"><div class="card-num">{counts.get('Low Score', 0)}</div><div class="card-label">Low Score</div></div>
         <div class="card card-non-eng" data-filter="status:Non-English"><div class="card-num">{counts.get('Non-English', 0)}</div><div class="card-label">Non-English</div></div>
         <div class="card card-old" data-filter="status:Too Old"><div class="card-num">{counts.get('Too Old', 0)}</div><div class="card-label">Too Old</div></div>
         <div class="card card-genre-high" data-filter="genre:High"><div class="card-num">{genre_counts.get('High', 0)}</div><div class="card-label">High Genre Match</div></div>
     </div>
+
+    {source_pills_html}
+
     <div class="filter-status-info" id="filterInfo">
         <div>
             <span>Showing <strong id="visibleCount">{len(data)}</strong> of {len(data)} items</span>
@@ -756,6 +1047,7 @@ def generate_html(data: List[Dict[str, Any]], file_path: str):
             <tr>
                 <th>Title</th>
                 <th>Year</th>
+                <th>Source</th>
                 <th>Size</th>
                 <th>Genre</th>
                 <th>IMDb Score</th>
@@ -793,6 +1085,7 @@ def generate_html(data: List[Dict[str, Any]], file_path: str):
 
     <script>
         const cards = document.querySelectorAll('.card');
+        const sourcePills = document.querySelectorAll('.source-pill');
         const rows = document.querySelectorAll('#mediaTableBody tr');
         const visibleCountSpan = document.getElementById('visibleCount');
         const resetBtn = document.getElementById('resetBtn');
@@ -801,6 +1094,9 @@ def generate_html(data: List[Dict[str, Any]], file_path: str):
         const serverText = document.getElementById('serverText');
 
         let isServerOnline = false;
+        let currentFilterType = 'all';
+        let currentFilterVal = '';
+        let currentSourceFilter = 'all';
 
         async function checkServerStatus() {{
             try {{
@@ -883,34 +1179,53 @@ def generate_html(data: List[Dict[str, Any]], file_path: str):
             showToast('Copied to clipboard!', 'success');
         }}
 
-        function setFilter(filterType, filterVal, activeCard) {{
-            cards.forEach(c => c.classList.remove('active'));
-            activeCard.classList.add('active');
-
+        function applyFilters() {{
             let visible = 0;
             rows.forEach(r => {{
-                let show = false;
-                if (filterType === 'all') {{
-                    show = true;
-                }} else if (filterType === 'status') {{
-                    show = (r.getAttribute('data-status') === filterVal);
-                }} else if (filterType === 'genre') {{
-                    show = (r.getAttribute('data-genre') === filterVal);
+                let matchStatus = false;
+                if (currentFilterType === 'all') {{
+                    matchStatus = true;
+                }} else if (currentFilterType === 'status') {{
+                    matchStatus = (r.getAttribute('data-status') === currentFilterVal);
+                }} else if (currentFilterType === 'genre') {{
+                    matchStatus = (r.getAttribute('data-genre') === currentFilterVal);
                 }}
+
+                let matchSource = false;
+                const rowSources = (r.getAttribute('data-sources') || '').toLowerCase().split(',');
+                if (currentSourceFilter === 'all') {{
+                    matchSource = true;
+                }} else if (currentSourceFilter === 'multi') {{
+                    matchSource = (rowSources.length > 1);
+                }} else {{
+                    matchSource = rowSources.includes(currentSourceFilter.toLowerCase());
+                }}
+
+                const show = matchStatus && matchSource;
                 r.style.display = show ? '' : 'none';
                 if (show) visible++;
             }});
 
             visibleCountSpan.textContent = visible;
             noMatchesDiv.style.display = (visible === 0) ? 'block' : 'none';
-            resetBtn.style.display = (filterType === 'all') ? 'none' : 'inline-block';
+            const isFiltered = (currentFilterType !== 'all') || (currentSourceFilter !== 'all');
+            resetBtn.style.display = isFiltered ? 'inline-block' : 'none';
         }}
 
         function resetFilter() {{
+            currentFilterType = 'all';
+            currentFilterVal = '';
+            currentSourceFilter = 'all';
+
+            cards.forEach(c => c.classList.remove('active'));
             const totalCard = document.querySelector('.card[data-filter="all"]');
-            if (totalCard) {{
-                setFilter('all', '', totalCard);
-            }}
+            if (totalCard) totalCard.classList.add('active');
+
+            sourcePills.forEach(p => p.classList.remove('active'));
+            const allPill = document.querySelector('.source-pill[data-source="all"]');
+            if (allPill) allPill.classList.add('active');
+
+            applyFilters();
         }}
 
         cards.forEach(card => {{
@@ -919,16 +1234,48 @@ def generate_html(data: List[Dict[str, Any]], file_path: str):
                 const isCurrentlyActive = card.classList.contains('active');
 
                 if (isCurrentlyActive && filter !== 'all') {{
-                    resetFilter();
+                    currentFilterType = 'all';
+                    currentFilterVal = '';
+                    cards.forEach(c => c.classList.remove('active'));
+                    const totalCard = document.querySelector('.card[data-filter="all"]');
+                    if (totalCard) totalCard.classList.add('active');
+                    applyFilters();
                     return;
                 }}
 
+                cards.forEach(c => c.classList.remove('active'));
+                card.classList.add('active');
+
                 if (filter === 'all') {{
-                    setFilter('all', '', card);
+                    currentFilterType = 'all';
+                    currentFilterVal = '';
                 }} else {{
                     const [type, val] = filter.split(':');
-                    setFilter(type, val, card);
+                    currentFilterType = type;
+                    currentFilterVal = val;
                 }}
+                applyFilters();
+            }});
+        }});
+
+        sourcePills.forEach(pill => {{
+            pill.addEventListener('click', () => {{
+                const source = pill.getAttribute('data-source') || 'all';
+                const isCurrentlyActive = pill.classList.contains('active');
+
+                if (isCurrentlyActive && source !== 'all') {{
+                    currentSourceFilter = 'all';
+                    sourcePills.forEach(p => p.classList.remove('active'));
+                    const allPill = document.querySelector('.source-pill[data-source="all"]');
+                    if (allPill) allPill.classList.add('active');
+                    applyFilters();
+                    return;
+                }}
+
+                sourcePills.forEach(p => p.classList.remove('active'));
+                pill.classList.add('active');
+                currentSourceFilter = source;
+                applyFilters();
             }});
         }});
     </script>
