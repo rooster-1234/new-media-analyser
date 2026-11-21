@@ -1832,6 +1832,7 @@ async def api_scan(username: str = Depends(require_user)):
 
 @app.post("/api/request")
 async def api_request(
+    request: Request,
     imdb: Optional[str] = None,
     title: Optional[str] = None,
     year: Optional[int] = None,
@@ -1839,6 +1840,17 @@ async def api_request(
     username: str = Depends(require_user)
 ):
     """1-Click request endpoint dispatching to the logged-in user's downloader."""
+    # Support both JSON payload and Query Parameters
+    try:
+        body = await request.json()
+        if isinstance(body, dict):
+            imdb = body.get("imdb_id") or body.get("imdb") or imdb
+            title = body.get("title") or title
+            year = body.get("year") or year
+            magnet = body.get("magnet") or magnet
+    except Exception:
+        pass
+
     settings = user_manager.get_user_settings(username)
     client_name = (settings.get("download_client") or "radarr").lower()
 
@@ -1847,7 +1859,7 @@ async def api_request(
         clean_imdb = None
 
     clean_title = (title or "").strip() or "Movie"
-    clean_year = year if year and year > 1900 else None
+    clean_year = year if year and int(year) > 1900 else None
     clean_magnet = (magnet or "").strip() or None
 
     # Check if user has actually configured a downloader
@@ -1855,7 +1867,9 @@ async def api_request(
     if client_name == "radarr":
         has_downloader = bool(settings.get("radarr_api_key"))
     elif client_name == "rutorrent":
-        has_downloader = bool(settings.get("rutorrent_url") and settings.get("rutorrent_user"))
+        has_downloader = bool(settings.get("rutorrent_url") and (settings.get("rutorrent_user") or settings.get("rutorrent_password")))
+    elif client_name in ("qbittorrent", "qbit"):
+        has_downloader = bool(settings.get("qbittorrent_url") and (settings.get("qbittorrent_api_key") or settings.get("qbittorrent_user")))
 
     if not has_downloader:
         return {
