@@ -32,45 +32,48 @@ OMDB_API_KEY = os.getenv("OMDB_API_KEY", "").strip()
 IMDB_CACHE_DB = os.path.join(OUTPUT_DIR, "imdb_ratings.db")
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-# Media filter instance (initialized on demand or during ensure_plex_profile)
+# Media filter instance (initialized on demand or during ensure_media_profile)
 media_filter: Optional[MediaFilter] = None
 
 
-def ensure_plex_profile(force_sync: bool = False, profile_path: str = "plex_library_profile.json") -> MediaFilter:
+def ensure_media_profile(force_sync: bool = False, profile_path: str = "plex_library_profile.json") -> MediaFilter:
     """
-    Ensures that a valid Plex library profile exists for duplicate checking and genre matching.
-    If PLEX_TOKEN is missing, launches official Plex OAuth in the user's browser.
-    If the profile file does not exist or force_sync is requested, scans Plex and generates it.
+    Ensures that a valid media server library profile exists for duplicate checking and genre matching.
+    Supports Plex (with automated OAuth fallback), Jellyfin, Emby, or combined ('all').
     """
     global media_filter
-    plex_token = os.getenv("PLEX_TOKEN", "").strip()
+    media_server_type = os.getenv("MEDIA_SERVER", "plex").strip().lower()
     profile_file = Path(profile_path)
 
-    # 1. Trigger OAuth login if token is missing
-    if not plex_token or "your_plex_token" in plex_token:
-        logger.info("Plex token is missing in .env. Launching official Plex OAuth login in your browser...")
-        if plex_oauth_login():
-            load_dotenv(override=True)
-            plex_token = os.getenv("PLEX_TOKEN", "").strip()
-        else:
-            logger.warning("Plex OAuth login was not completed. Proceeding without Plex library synchronization.")
+    # 1. Trigger OAuth login if using Plex and token is missing
+    if media_server_type == "plex":
+        plex_token = os.getenv("PLEX_TOKEN", "").strip()
+        if not plex_token or "your_plex_token" in plex_token:
+            logger.info("Plex token is missing in .env. Launching official Plex OAuth login in your browser...")
+            if plex_oauth_login():
+                load_dotenv(override=True)
+            else:
+                logger.warning("Plex OAuth login was not completed. Proceeding without Plex library synchronization.")
 
     # 2. Generate or refresh profile if missing or requested
-    if (force_sync or not profile_file.exists()) and plex_token:
-        plex_url = os.getenv("PLEX_URL", "").strip()
-        logger.info("Generating Plex library profile from Plex Media Server...")
+    if force_sync or not profile_file.exists():
+        logger.info(f"Generating media library profile using '{media_server_type}' provider...")
         try:
-            analyzer = PlexLibraryAnalyzer(base_url=plex_url, token=plex_token)
-            if analyzer.connect():
-                profile_data = analyzer.generate_profile()
+            from media_servers import get_media_server_provider
+            provider = get_media_server_provider(media_server_type)
+            if provider.connect():
+                profile_data = provider.generate_profile()
                 with open(profile_file, "w", encoding="utf-8") as f:
                     json.dump(profile_data, f, indent=2, ensure_ascii=False)
-                logger.info(f"Successfully generated and saved Plex profile to '{profile_path}'.")
+                logger.info(f"Successfully generated and saved library profile from '{media_server_type}' to '{profile_path}'.")
         except Exception as e:
-            logger.warning(f"Could not generate Plex profile: {e}")
+            logger.warning(f"Could not generate media profile from {media_server_type}: {e}")
 
     media_filter = MediaFilter(profile_path=profile_path)
     return media_filter
+
+# Backward-compatibility alias
+ensure_plex_profile = ensure_media_profile
 
 # Cache for IMDb metadata (score, genres) to avoid redundant network calls
 imdb_cache: Dict[str, Dict[str, Any]] = {}
@@ -939,17 +942,21 @@ def generate_html(data: List[Dict[str, Any]], file_path: str):
 
 if __name__ == "__main__":
     import argparse
-    parser = argparse.ArgumentParser(description="Scrape and analyze new media releases against Plex library.")
+    parser = argparse.ArgumentParser(description="Scrape and analyze new media releases against Plex/Jellyfin/Emby library.")
     parser.add_argument("--login", action="store_true", help="Log in to Plex via official browser OAuth")
-    parser.add_argument("--sync-plex", action="store_true", help="Re-scan Plex library and refresh profile before scraping")
+    parser.add_argument("--server", choices=["plex", "jellyfin", "emby", "all"], help="Choose or override active media server provider")
+    parser.add_argument("--sync", "--sync-plex", action="store_true", dest="sync_media", help="Re-scan media server library and refresh profile before scraping")
     args = parser.parse_args()
+
+    if args.server:
+        os.environ["MEDIA_SERVER"] = args.server
 
     if args.login:
         plex_oauth_login()
         load_dotenv(override=True)
 
-    if args.sync_plex:
-        ensure_plex_profile(force_sync=True)
+    if args.sync_media:
+        ensure_media_profile(force_sync=True)
 
     async def main():
         data = await fetch_media_index()

@@ -15,6 +15,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.3.0] - 2026-11-21
+
+### Added
+- **Multi-Server Provider Engine (`media_servers.py`)**:
+  - Abstract `BaseMediaServer` interface with pluggable providers for Plex, Jellyfin, and Emby.
+  - **Jellyfin Provider**: Fast batch scanning of movies, series, season indexes, and genres via REST API.
+  - **Emby Provider**: Direct REST integration supporting library discovery, duplicate indices, and director analytics.
+  - **Combined Mode (`MEDIA_SERVER=all`)**: Aggregates and deduplicates library items across all configured servers simultaneously.
+- **Unified Media Server Configuration**:
+  - Added `MEDIA_SERVER` setting in `.env` (`plex`, `jellyfin`, `emby`, or `all`).
+  - Added `--server` and `--sync` options to `scraper.py` and `plex_analyzer.py`.
+
+---
+
 ## [0.2.0] - 2026-11-20
 
 ### Added

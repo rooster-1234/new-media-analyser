@@ -373,12 +373,16 @@ def print_summary(profile: dict):
     top_level = [(k, v) for k, v in taste.get("top_level_genres", {}).items() if not k.endswith("(Watched)")]
     categories = [(k, v) for k, v in taste.get("categories", {}).items() if not k.endswith("(Watched)")]
 
+    total_episodes = summary.get('total_episodes')
+    ep_str = f" ({total_episodes} total episodes)" if total_episodes is not None else ""
+    watched_str = f" ({summary.get('watched_movies', 0)} watched)" if summary.get('watched_movies') is not None else ""
+
     print("\n" + "=" * 68)
-    print(f" PLEX LIBRARY PROFILE: {server['server_name']}")
-    print(f" Generated: {server['generated_at']}")
+    print(f" MEDIA LIBRARY PROFILE: {server.get('server_name', 'Server')}")
+    print(f" Generated: {server.get('generated_at', datetime.now().isoformat())}")
     print("=" * 68)
-    print(f" Movies in Library : {summary['total_movies']} ({summary['watched_movies']} watched)")
-    print(f" TV Shows in Library: {summary['total_shows']} ({summary['total_episodes']} total episodes)")
+    print(f" Movies in Library : {summary.get('total_movies', 0)}{watched_str}")
+    print(f" TV Shows in Library: {summary.get('total_shows', 0)}{ep_str}")
     print("=" * 68)
 
     # 1. TOP LEVEL GENRES (Primary Genre per item)
@@ -545,7 +549,8 @@ def plex_oauth_login(env_file: str = ".env", timeout: int = 180) -> bool:
 
 def main():
     import argparse
-    parser = argparse.ArgumentParser(description="Analyze Plex Media Library and extract user preferences.")
+    parser = argparse.ArgumentParser(description="Analyze Media Library (Plex, Jellyfin, Emby) and extract user preferences.")
+    parser.add_argument("--server", choices=["plex", "jellyfin", "emby", "all"], help="Media server provider to analyze (default: from .env or plex)")
     parser.add_argument("--env-file", default=".env", help="Path to .env configuration file")
     parser.add_argument("--output", default="plex_library_profile.json", help="Path for JSON output profile")
     parser.add_argument("--summary-only", action="store_true", help="Print summary without writing full JSON")
@@ -559,11 +564,29 @@ def main():
     else:
         load_dotenv()
 
+    server_choice = (args.server or os.getenv("MEDIA_SERVER") or "plex").strip().lower()
+
+    # If Jellyfin, Emby, or All (combined) is selected, delegate to media_servers provider
+    if server_choice in ("jellyfin", "emby", "all", "combined"):
+        from media_servers import get_media_server_provider
+        provider = get_media_server_provider(server_choice)
+        if not provider.connect():
+            print(f"\n[!] Failed to connect to {server_choice.capitalize()} Media Server. Check .env configuration.\n")
+            sys.exit(1)
+        profile = provider.generate_profile()
+        print_summary(profile)
+        if not args.summary_only:
+            out_path = Path(args.output)
+            with open(out_path, "w", encoding="utf-8") as f:
+                json.dump(profile, f, indent=2, ensure_ascii=False)
+            print(f"Saved complete profile to: {out_path.resolve()}")
+        return
+
+    # Standard Plex Flow
     if args.login:
         success = plex_oauth_login(env_file=args.env_file)
         if not success:
             sys.exit(1)
-        # Reload environment variables after login
         if env_path.exists():
             load_dotenv(dotenv_path=env_path, override=True)
 

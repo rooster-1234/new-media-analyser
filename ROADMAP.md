@@ -56,14 +56,16 @@ Package the entire platform for simple, one-click self-hosting in homelabs and N
 
 Extend library analysis and duplicate detection beyond Plex to the open-source media server ecosystem.
 
-- [ ] **Abstract Media Server Interface (`BaseMediaServer`)**
-  - [ ] Standardize core contract: `connect()`, `get_libraries()`, `get_profile()`, `is_duplicate()`.
-- [ ] **Jellyfin Integration**
-  - [ ] Connect via Jellyfin REST API using API tokens or Quick Connect PIN login.
-  - [ ] Catalog movies and TV shows, extract genre distributions, and build duplicate lookup indices.
-- [ ] **Emby Integration**
-  - [ ] Connect via Emby REST API using user tokens or Emby Connect.
-  - [ ] Catalog media library and synchronize preference profile.
+- [x] **Abstract Media Server Interface (`BaseMediaServer`)**
+  - [x] Standardize core contract: `connect()`, `generate_profile()`.
+- [x] **Jellyfin Integration**
+  - [x] Connect via Jellyfin REST API using API tokens (`X-Emby-Token` / `Authorization`).
+  - [x] Catalog movies and TV shows, extract genre distributions, and build duplicate lookup indices.
+- [x] **Emby Integration**
+  - [x] Connect via Emby REST API using user tokens (`X-Emby-Token`).
+  - [x] Catalog media library and synchronize preference profile.
+- [x] **Combined Multi-Server Support (`MEDIA_SERVER=all`)**
+  - [x] Scan and deduplicate library items across Plex, Jellyfin, and Emby simultaneously.
 
 ---
 
