@@ -1,0 +1,13 @@
+services:
+  new-media-analyser:
+    build: .
+    container_name: new-media-analyser
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./data:/app/data
+      - ./output:/app/output
+    environment:
+      - PORT=8080
+      - HOST=0.0.0.0
