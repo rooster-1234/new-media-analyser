@@ -58,7 +58,7 @@ An intelligent, self-hosted media release monitor and download dispatcher. It co
 Clone the repository and set up a virtual environment:
 
 ```bash
-git clone https://github.com/ian-h/new-media-analyser.git
+git clone https://github.com/rooster-1234/new-media-analyser.git
 cd new-media-analyser
 
 # Create and activate virtual environment
@@ -138,7 +138,7 @@ FILTER_DISLIKED_GENRES=Fantasy, Romance
 ### Option A: Docker Compose (Recommended)
 
 ```bash
-git clone https://github.com/ian-h/new-media-analyser.git
+git clone https://github.com/rooster-1234/new-media-analyser.git
 cd new-media-analyser
 docker compose up -d
 ```
@@ -149,7 +149,7 @@ The application will automatically build with headless Chromium on ARM64 and sta
 We provide an automated setup script that handles the Linux virtual environment, Playwright system shared libraries, and systemd registration:
 
 ```bash
-git clone https://github.com/ian-h/new-media-analyser.git
+git clone https://github.com/rooster-1234/new-media-analyser.git
 cd new-media-analyser
 chmod +x setup_service.sh
 ./setup_service.sh
