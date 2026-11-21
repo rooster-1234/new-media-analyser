@@ -25,7 +25,7 @@ Transition from standalone CLI scripts and static HTML reports to a unified, sel
 
 - [ ] **Unified Web Backend (FastAPI / Flask)**
   - [ ] Serve the interactive media dashboard directly from a single web port (e.g. `http://localhost:8080`).
-  - [ ] Consolidate the downloader API routes (`/api/request`, `/api/scan`) into the web server.
+  - [x] Consolidate downloader API routes (`/api/request`, `/api/status`) into a local server bridge (`retrieve_media.py --serve` on `127.0.0.1:7890`).
 - [ ] **Interactive Web Configuration Page (`/settings`)**
   - [ ] **Media Server Settings**: Dropdown to select media server type (Plex / Jellyfin / Emby), connection test button, and 1-click OAuth login.
   - [ ] **Downloader Settings**: Form for Radarr, Sonarr, ruTorrent, and Seerr API keys, paths, and connection verification buttons.
@@ -54,7 +54,7 @@ Package the entire platform for simple, one-click self-hosting in homelabs and N
 
 ---
 
-## Phase 3: Multi-Platform Media Server Support (Jellyfin & Emby)
+## Phase 3: Multi-Platform Media Server Support (Jellyfin & Emby) [Completed - v0.3.0]
 
 Extend library analysis and duplicate detection beyond Plex to the open-source media server ecosystem.
 
@@ -71,12 +71,15 @@ Extend library analysis and duplicate detection beyond Plex to the open-source m
 
 ---
 
-## Phase 4: Additional Indexers & Torrent Sources
+## Phase 4: Additional Indexers & Torrent Sources [In Progress - v0.4.0]
 
-Broaden the release scanning coverage and implement robust proxy handling for protected sources.
+Broaden the release scanning coverage, merge multi-source feeds, and implement robust proxy handling for protected sources.
 
-- [ ] **uIndex.org Integration**
-  - [ ] Build parser / API scraper for uIndex release lists.
+- [x] **uIndex.org Integration**
+  - [x] Build Playwright stealth table parser for uIndex top movie release lists.
+  - [x] Extract direct magnets, clean title/year, file sizes, and live seeders.
+  - [x] Cinemeta search API integration for instant IMDb ID resolution on unlinked releases.
+  - [x] Unified deduplication and multi-source filtering in `media_report.html`.
 - [ ] **ext.to Integration (Cloudflare Bypass)**
   - [ ] Evaluate and implement Cloudflare challenge handling (e.g. FlareSolverr proxy container or `curl_cffi` browser fingerprinting).
 - [ ] **Prowlarr / Jackett Multi-Indexer Integration** *(Recommended)*
