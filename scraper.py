@@ -259,8 +259,14 @@ async def fetch_imdb_metadata(imdb_id: str) -> Dict[str, Any]:
             data = await loop.run_in_executor(None, _get)
             meta = data.get("meta") if isinstance(data, dict) else None
             if meta:
-                raw_score = meta.get("imdbRating")
-                score = str(raw_score) if raw_score and is_valid_imdb_score(str(raw_score)) else "N/A"
+                # Priority 1: Query local official IMDb ratings database (daily export directly from datasets.imdbws.com)
+                dataset_score = get_imdb_dataset_rating(imdb_id)
+                if dataset_score:
+                    score = dataset_score
+                else:
+                    raw_score = meta.get("imdbRating")
+                    score = str(raw_score) if raw_score and is_valid_imdb_score(str(raw_score)) else "N/A"
+
                 genres = meta.get("genres") or meta.get("genre") or []
                 if isinstance(genres, str):
                     genres = [g.strip() for g in genres.split(",") if g.strip()]
@@ -290,13 +296,6 @@ async def fetch_imdb_metadata(imdb_id: str) -> Dict[str, Any]:
                         meta_year = int(release_date[:4])
                     except Exception:
                         pass
-
-                # Fallback 1: Query local official IMDb ratings database (from datasets.imdbws.com)
-                if score == "N/A":
-                    dataset_score = get_imdb_dataset_rating(imdb_id)
-                    if dataset_score:
-                        score = dataset_score
-                        logger.info(f"Retrieved IMDb score {score} for {imdb_id} via official IMDb dataset cache")
 
                 poster = meta.get("poster") or meta.get("poster_path") or ""
 
@@ -345,7 +344,8 @@ async def fetch_imdb_metadata(imdb_id: str) -> Dict[str, Any]:
             logger.debug(f"Cinemeta lookup failed for {imdb_id} ({media_type}): {e}")
 
     fallback_poster = f"https://images.metahub.space/poster/small/{imdb_id}/img" if imdb_id and imdb_id.startswith("tt") else ""
-    fallback = {"score": "N/A", "genres": [], "synopsis": "", "language": None, "country": None, "release_date": None, "year": None, "poster": fallback_poster}
+    fallback_score = get_imdb_dataset_rating(imdb_id) or "N/A"
+    fallback = {"score": fallback_score, "genres": [], "synopsis": "", "language": None, "country": None, "release_date": None, "year": None, "poster": fallback_poster}
     imdb_cache[imdb_id] = fallback
     return fallback
 
