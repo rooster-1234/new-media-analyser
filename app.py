@@ -2491,9 +2491,6 @@ def render_dashboard_page(username: str, settings: Dict[str, Any], items: List[D
                 <th style="text-align: center;">Request ({downloader_name})</th>
             </tr>
         </thead>
-                <th style="text-align: center;">Request ({downloader_name})</th>
-            </tr>
-        </thead>
         <tbody id="mediaTableBody">{''.join(rows)}
         </tbody>
     </table>
