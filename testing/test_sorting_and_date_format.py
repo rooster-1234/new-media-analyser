@@ -12,6 +12,10 @@ class TestSortingAndDateFormat(unittest.TestCase):
         _, cls.token = user_manager.authenticate_user(cls.username, cls.password)
         cls.client = TestClient(app.app, cookies={"session_token": cls.token})
 
+    @classmethod
+    def tearDownClass(cls):
+        user_manager.delete_user(cls.username)
+
     def test_format_long_date(self):
         """Verify format_long_date outputs long readable dates."""
         self.assertEqual(app.format_long_date("2026-06-06"), "6 June 2026")

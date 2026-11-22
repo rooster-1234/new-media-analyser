@@ -11,9 +11,13 @@ class TestScanProgressAndExists(unittest.TestCase):
         user_manager.register_user("heart_test@example.com", "Password123!")
         _, cls.token = user_manager.authenticate_user("heart_test@example.com", "Password123!")
 
+    @classmethod
+    def tearDownClass(cls):
+        user_manager.delete_user("heart_test@example.com")
+
     def test_heart_of_the_beast_marked_exists(self):
         # Using a profile containing 'Heart of the Beast'
-        profile_path = "data/profiles/test_plex_qbit_library_profile.json"
+        profile_path = "data/profiles/ihargreaves@hotmail.co.uk_library_profile.json"
         
         # Test 1: With exclude_existing = True
         flt_true = MediaFilter(profile_path=profile_path)

@@ -90,6 +90,36 @@ def register_user(username: str, password: str) -> tuple[bool, str]:
     return True, "User registered successfully."
 
 
+def delete_user(username: str) -> bool:
+    """Deletes a user account and their profile files from disk."""
+    username = username.strip().lower()
+    users = load_users()
+    if username in users:
+        del users[username]
+        save_users(users)
+
+        # Invalidate active session tokens
+        tokens_to_del = [t for t, u in active_sessions.items() if u == username]
+        for t in tokens_to_del:
+            active_sessions.pop(t, None)
+
+        # Clean up profile files
+        settings_file = PROFILES_DIR / f"{username}_settings.json"
+        if settings_file.exists():
+            try:
+                settings_file.unlink()
+            except Exception:
+                pass
+        profile_file = PROFILES_DIR / f"{username}_library_profile.json"
+        if profile_file.exists():
+            try:
+                profile_file.unlink()
+            except Exception:
+                pass
+        return True
+    return False
+
+
 def authenticate_user(username: str, password: str) -> tuple[bool, Optional[str]]:
     """Validates login credentials and returns a session token."""
     username = username.strip().lower()

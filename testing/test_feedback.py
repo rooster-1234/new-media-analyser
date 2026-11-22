@@ -23,6 +23,8 @@ class TestFeedbackSystem(unittest.TestCase):
             self.original_feedback = self.feedback_file.read_text(encoding="utf-8")
 
     def tearDown(self):
+        # Clean up test user
+        user_manager.delete_user(self.username)
         # Restore original feedback
         if self.original_feedback is not None:
             self.feedback_file.write_text(self.original_feedback, encoding="utf-8")

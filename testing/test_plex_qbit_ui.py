@@ -10,6 +10,10 @@ class TestPlexAndQbitUI(unittest.TestCase):
         user_manager.register_user("test_ui_user@example.com", "Password123!")
         _, cls.token = user_manager.authenticate_user("test_ui_user@example.com", "Password123!")
 
+    @classmethod
+    def tearDownClass(cls):
+        user_manager.delete_user("test_ui_user@example.com")
+
     def test_settings_page_plex_and_qbit_ui(self):
         resp = self.client.get("/settings", cookies={"session_token": self.token})
         self.assertEqual(resp.status_code, 200)
