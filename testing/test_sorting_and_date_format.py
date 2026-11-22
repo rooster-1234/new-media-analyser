@@ -58,5 +58,9 @@ class TestSortingAndDateFormat(unittest.TestCase):
         self.assertIn("data-score=", html)
         self.assertIn("data-title=", html)
 
+        # Bold formatting for date-text
+        self.assertIn("class='date-text'", html)
+        self.assertIn(".date-text { font-size: 13px; color: #cbd5e1; font-weight: 600;", html)
+
 if __name__ == "__main__":
     unittest.main()

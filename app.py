@@ -1880,7 +1880,7 @@ def render_dashboard_page(username: str, settings: Dict[str, Any], items: List[D
                         </div>
                     </div>
                 </td>
-                <td><span style="font-size: 13px; color: #cbd5e1; white-space: nowrap;">{html.escape(date_display)}</span></td>
+                <td><span class='date-text'>{html.escape(date_display)}</span></td>
                 <td>{source_badge_html}</td>
                 <td><span class='size-text'>{html.escape(size_str)}</span></td>
                 <td>
@@ -2200,8 +2200,9 @@ def render_dashboard_page(username: str, settings: Dict[str, Any], items: List[D
         .title-link:hover {{ text-decoration: underline; color: #7dd3fc; }}
         .title-main {{ font-weight: 600; color: #f8fafc; font-size: 14px; }}
         .synopsis-text {{ font-size: 12px; color: #94a3b8; margin-top: 5px; line-height: 1.45; max-width: 440px; }}
-        .size-text {{ font-size: 13px; color: #cbd5e1; font-weight: 500; font-variant-numeric: tabular-nums; white-space: nowrap; }}
+        .size-text {{ font-size: 13px; color: #cbd5e1; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }}
         .score {{ font-weight: 600; color: #f8fafc; }}
+        .date-text {{ font-size: 13px; color: #cbd5e1; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }}
         .badge {{ display: inline-block; padding: 4px 10px; border-radius: 9999px; font-size: 12px; font-weight: 600; text-align: center; white-space: nowrap; }}
         .badge-consider {{ background: rgba(34, 197, 94, 0.18); color: #4ade80; border: 1px solid rgba(34, 197, 94, 0.4); }}
         .badge-exists {{ background: rgba(59, 130, 246, 0.18); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.4); }}
