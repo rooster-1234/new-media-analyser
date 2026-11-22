@@ -231,11 +231,13 @@ class MediaFilter:
                 if any(fl in desc_lang for fl in FOREIGN_LANGUAGES) and "english" not in desc_lang:
                     return True, m.group(1).strip()
 
-        # 4. Cinemeta country (if single country and distinctly non-English)
+        # 4. Metadata country (if primary/first country of origin is non-English)
         if meta_country and not meta_lang:
             countries = [c.strip().lower() for c in meta_country.split(",") if c.strip()]
+            if countries and countries[0] not in ENGLISH_COUNTRIES:
+                return True, countries[0].title()
             has_eng_country = any(c in ENGLISH_COUNTRIES for c in countries)
-            if not has_eng_country and len(countries) == 1:
+            if not has_eng_country:
                 return True, countries[0].title()
 
         return False, "English"

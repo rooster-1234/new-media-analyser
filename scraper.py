@@ -299,8 +299,8 @@ async def fetch_imdb_metadata(imdb_id: str) -> Dict[str, Any]:
 
                 poster = meta.get("poster") or meta.get("poster_path") or ""
 
-                # Fallback 2: Query OMDb API if score, release date, or poster is still missing and API key is set
-                if (score == "N/A" or not release_date or not poster) and OMDB_API_KEY:
+                # Fallback 2: Query OMDb API if score, release date, poster, or language is missing and API key is set
+                if (score == "N/A" or not release_date or not poster or not language) and OMDB_API_KEY:
                     try:
                         omdb_url = f"https://www.omdbapi.com/?i={imdb_id}&apikey={OMDB_API_KEY}"
                         def _get_omdb():
@@ -312,6 +312,10 @@ async def fetch_imdb_metadata(imdb_id: str) -> Dict[str, Any]:
                             if raw_omdb and is_valid_imdb_score(str(raw_omdb)):
                                 score = str(raw_omdb)
                                 logger.info(f"Retrieved IMDb score {score} for {imdb_id} via OMDb fallback")
+                        if not language and omdb_data.get("Language") and omdb_data.get("Language") != "N/A":
+                            language = omdb_data["Language"]
+                        if not country and omdb_data.get("Country") and omdb_data.get("Country") != "N/A":
+                            country = omdb_data["Country"]
                         raw_omdb_rel = omdb_data.get("Released")
                         if raw_omdb_rel and raw_omdb_rel != "N/A" and not release_date:
                             try:
@@ -602,6 +606,12 @@ def deduplicate_and_merge(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
                 existing["synopsis"] = item["synopsis"]
             if not existing.get("poster") and item.get("poster"):
                 existing["poster"] = item["poster"]
+            if not existing.get("language") and item.get("language"):
+                existing["language"] = item["language"]
+            if not existing.get("country") and item.get("country"):
+                existing["country"] = item["country"]
+            if not existing.get("release_date") and item.get("release_date"):
+                existing["release_date"] = item["release_date"]
 
     return list(merged_map.values())
 
