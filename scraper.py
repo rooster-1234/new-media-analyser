@@ -308,10 +308,11 @@ async def fetch_imdb_metadata(imdb_id: str) -> Dict[str, Any]:
                             with urllib.request.urlopen(omdb_url, timeout=4) as omdb_resp:
                                 return json.loads(omdb_resp.read().decode("utf-8"))
                         omdb_data = await loop.run_in_executor(None, _get_omdb)
-                        raw_omdb = omdb_data.get("imdbRating")
-                        if raw_omdb and is_valid_imdb_score(str(raw_omdb)):
-                            score = str(raw_omdb)
-                            logger.info(f"Retrieved IMDb score {score} for {imdb_id} via OMDb fallback")
+                        if score == "N/A":
+                            raw_omdb = omdb_data.get("imdbRating")
+                            if raw_omdb and is_valid_imdb_score(str(raw_omdb)):
+                                score = str(raw_omdb)
+                                logger.info(f"Retrieved IMDb score {score} for {imdb_id} via OMDb fallback")
                         raw_omdb_rel = omdb_data.get("Released")
                         if raw_omdb_rel and raw_omdb_rel != "N/A" and not release_date:
                             try:
