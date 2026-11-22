@@ -12,6 +12,7 @@ This document outlines the planned milestones, upcoming features, and technical 
 - [x] **Visual Movie Posters & Hover Zoom**: 44×64px thumbnails in media cell expanding to 160×240px artwork preview on mouse hover.
 - [x] **Relative Timeframe Filtering**: Filter by Last 7 Days, Last 30 Days, Last 90 Days, Last 12 Months, Specific Year, or Any.
 - [x] **Stacked Dual-Source Links**: Direct site record links to The Pirate Bay (`PB ↗`) and `uIndex ↗` stacked vertically in compact column.
+- [x] **Table Column Sorting & Long Date Display**: Click-to-sort by Title, Released, Size, IMDb Score, and Filter Status with human-readable long date formatting (e.g. 6 June 2026).
 - [x] **Containerisation & ARM64 Pi 5 Support**: Docker & Docker Compose setup with persistent data volumes running live on Raspberry Pi 5.
 
 ---

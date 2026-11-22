@@ -35,9 +35,12 @@ Like many media server owners, I found myself constantly checking "Top 48h" and 
   - 44×64px poster thumbnails integrated directly alongside movie titles and synopses.
   - Interactive hover zoom expands posters to a high-resolution 160×240px artwork preview with soft drop shadows and animations.
   - Zero-latency automated CDN resolution via Cinemeta and Metahub (`images.metahub.space`) with fallback placeholders.
-- **📅 US Release Date Timeframe Filtering**:
-  - Parses official US theatrical and streaming release dates.
+- **📅 Release Date Filtering & Long Format Display**:
+  - Parses official theatrical and streaming release dates, formatted in human-readable long date format (e.g. `6 June 2026`).
   - 1-click filter pills for **Within Last 7 Days**, **Last 30 Days**, **Last 90 Days**, **Last 12 Months**, **Specific Year**, or **Any**.
+- **📊 Interactive Column Sorting**:
+  - 1-click column heading sorting for **Title** (A-Z / Z-A), **Released** (newest / oldest), **Size** (numeric bytes sort), **IMDb Score** (highest / lowest), and **Filter Status**.
+  - Interactive sort direction indicators (`▲`, `▼`, `↕`) with responsive hover styling.
 - **🔗 Stacked Tracker Detail Links**:
   - Separate, compact pill buttons for **`PB ↗`** and **`uIndex ↗`** stacked vertically in the Source column.
   - Smart direct linking to original tracker detail records (`description.php` / `details.php`) with fallback keyword searches.

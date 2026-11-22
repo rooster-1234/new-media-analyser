@@ -17,6 +17,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.6.0] - 2026-11-21
 
 ### Added
+- **Interactive Table Column Sorting & Long Date Formatting**:
+  - Added click-to-sort functionality across table column headings: **Title** (A-Z / Z-A), **Released** (newest / oldest), **Size** (numeric byte sorting), **IMDb Score** (highest / lowest), and **Filter Status**.
+  - Added interactive sort direction indicators (`▲`, `▼`, `↕`) with responsive hover effects.
+  - Renamed column header and filter pill label from "US Release" to **"Released"**.
+  - Formatted release dates from raw ISO format (`YYYY-MM-DD`) into human-readable long format (e.g. `6 June 2026`).
 - **Tester Feedback System (In-App, WhatsApp & Email Hybrid)**:
   - Added a prominent `💬 Feedback` button in the dashboard and settings navigation bars.
   - Interactive dark-theme modal allowing testers to submit experience ratings, categories, and freeform comments.

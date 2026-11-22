@@ -8,11 +8,13 @@ Built with FastAPI. Provides:
 """
 
 import asyncio
+from datetime import datetime
 import html
 import json
 import logging
 import os
 from pathlib import Path
+import re
 from typing import Any, Dict, List, Optional
 
 from fastapi import FastAPI, Request, Response, HTTPException, Depends
@@ -1637,6 +1639,42 @@ def render_settings_page(username: str, settings: Dict[str, Any]) -> str:
 </html>"""
 
 
+def parse_size_to_bytes(size_str: Optional[str]) -> int:
+    """Converts a size string (e.g. '1.17 GiB', '807.34 MiB') into integer bytes for accurate numeric sorting."""
+    if not size_str:
+        return 0
+    m = re.match(r"^([\d.]+)\s*([a-zA-Z]+)", str(size_str).strip())
+    if not m:
+        return 0
+    try:
+        val = float(m.group(1))
+        unit = m.group(2).lower()
+        if "t" in unit:
+            return int(val * (1024 ** 4))
+        elif "g" in unit:
+            return int(val * (1024 ** 3))
+        elif "m" in unit:
+            return int(val * (1024 ** 2))
+        elif "k" in unit:
+            return int(val * 1024)
+        return int(val)
+    except Exception:
+        return 0
+
+
+def format_long_date(date_str: Optional[str], year: Optional[int] = None) -> str:
+    """Formats an ISO release date (YYYY-MM-DD) into long human-readable format, e.g. '6 June 2026'."""
+    if date_str:
+        try:
+            d = datetime.strptime(str(date_str)[:10], "%Y-%m-%d")
+            return f"{d.day} {d.strftime('%B %Y')}"
+        except Exception:
+            return str(date_str)
+    if year and int(year) > 1900:
+        return str(year)
+    return "-"
+
+
 def get_source_url(source_name: str, item: Dict[str, Any]) -> str:
     """Returns direct detail record link or search fallback link for a given source."""
     import urllib.parse
@@ -1768,12 +1806,15 @@ def render_dashboard_page(username: str, settings: Dict[str, Any], items: List[D
 
         release_date = item.get("release_date") or ""
         year_val = item.get("year") or 0
-        if release_date:
-            date_display = release_date
-        elif year_val:
-            date_display = str(year_val)
-        else:
-            date_display = "-"
+        date_display = format_long_date(release_date, year_val)
+
+        sort_title = (item.get("clean_title") or item.get("title") or "").strip()
+        raw_score = item.get("imdb_score")
+        try:
+            score_num = float(raw_score) if raw_score and str(raw_score) != "N/A" else 0.0
+        except Exception:
+            score_num = 0.0
+        size_bytes = parse_size_to_bytes(item.get("size"))
 
         size_str = str(item.get("size") or "N/A")
         synopsis = item.get("synopsis", "")
@@ -1829,7 +1870,7 @@ def render_dashboard_page(username: str, settings: Dict[str, Any], items: List[D
         btn_html = f"<button class='btn-request' data-magnet=\"{html.escape(magnet_str)}\" onclick=\"requestMedia(this, '{imdb_id}', '{escaped_title}', {year_val})\">Request ({downloader_name})</button>"
 
         rows.append(f"""
-            <tr data-status="{html.escape(status)}" data-genre="{html.escape(genre_match)}" data-sources="{html.escape(source_keys_str)}" data-release-date="{html.escape(release_date)}" data-year="{year_val}">
+            <tr data-status="{html.escape(status)}" data-genre="{html.escape(genre_match)}" data-sources="{html.escape(source_keys_str)}" data-release-date="{html.escape(release_date)}" data-year="{year_val}" data-title="{html.escape(sort_title)}" data-score="{score_num}" data-size-bytes="{size_bytes}">
                 <td>
                     <div class='media-cell'>
                         {poster_html}
@@ -1839,7 +1880,7 @@ def render_dashboard_page(username: str, settings: Dict[str, Any], items: List[D
                         </div>
                     </div>
                 </td>
-                <td><span style="font-family: monospace; font-size: 13px; color: #cbd5e1;">{html.escape(date_display)}</span></td>
+                <td><span style="font-size: 13px; color: #cbd5e1; white-space: nowrap;">{html.escape(date_display)}</span></td>
                 <td>{source_badge_html}</td>
                 <td><span class='size-text'>{html.escape(size_str)}</span></td>
                 <td>
@@ -2052,6 +2093,35 @@ def render_dashboard_page(username: str, settings: Dict[str, Any], items: List[D
         th {{ background: #222; color: #94a3b8; font-weight: 600; text-transform: uppercase; font-size: 12px; letter-spacing: 0.5px; }}
         tr {{ position: relative; }}
         tr:hover {{ background: #202020; }}
+
+        th.sortable {{
+            cursor: pointer;
+            user-select: none;
+            transition: background 0.15s ease, color 0.15s ease;
+            white-space: nowrap;
+        }}
+        th.sortable:hover {{
+            background: #2a2a2a;
+            color: #38bdf8;
+        }}
+        th.sortable.sorted-asc, th.sortable.sorted-desc {{
+            color: #38bdf8;
+            background: rgba(56, 189, 248, 0.08);
+        }}
+        .sort-icon {{
+            font-size: 11px;
+            margin-left: 4px;
+            opacity: 0.45;
+            display: inline-block;
+        }}
+        th.sortable:hover .sort-icon {{
+            opacity: 1;
+            color: #38bdf8;
+        }}
+        th.sortable.sorted-asc .sort-icon, th.sortable.sorted-desc .sort-icon {{
+            opacity: 1;
+            color: #38bdf8;
+        }}
 
         /* Option C: Integrated Media Cell with Poster Thumbnail and Hover Zoom */
         .media-cell {{
@@ -2391,7 +2461,7 @@ def render_dashboard_page(username: str, settings: Dict[str, Any], items: List[D
             <button class="source-pill pill-uindex" data-source="uindex">uIndex ({uindex_count})</button>
         </div>
         <div class="source-filter-bar timeframe-bar" style="margin-bottom: 0;">
-            <span class="source-filter-label">US Release:</span>
+            <span class="source-filter-label">Released:</span>
             <button class="timeframe-pill active" data-timeframe="all">All Time ({len(items)})</button>
             <button class="timeframe-pill" data-timeframe="7d">Last 7 Days</button>
             <button class="timeframe-pill" data-timeframe="30d">Last 30 Days</button>
@@ -2410,13 +2480,16 @@ def render_dashboard_page(username: str, settings: Dict[str, Any], items: List[D
     <table>
         <thead>
             <tr>
-                <th>Title</th>
-                <th>US Release</th>
+                <th class="sortable" data-sort="title" onclick="sortTable('title')" title="Click to sort by Title">Title <span class="sort-icon">↕</span></th>
+                <th class="sortable" data-sort="date" onclick="sortTable('date')" title="Click to sort by Release Date">Released <span class="sort-icon">↕</span></th>
                 <th>Source</th>
-                <th>Size</th>
+                <th class="sortable" data-sort="size" onclick="sortTable('size')" title="Click to sort by File Size">Size <span class="sort-icon">↕</span></th>
                 <th>Genre</th>
-                <th>IMDb Score</th>
-                <th>Filter Status</th>
+                <th class="sortable" data-sort="score" onclick="sortTable('score')" title="Click to sort by IMDb Score">IMDb Score <span class="sort-icon">↕</span></th>
+                <th class="sortable" data-sort="status" onclick="sortTable('status')" title="Click to sort by Filter Status">Filter Status <span class="sort-icon">↕</span></th>
+                <th style="text-align: center;">Request ({downloader_name})</th>
+            </tr>
+        </thead>
                 <th style="text-align: center;">Request ({downloader_name})</th>
             </tr>
         </thead>
@@ -2457,6 +2530,71 @@ def render_dashboard_page(username: str, settings: Dict[str, Any], items: List[D
         let currentSourceFilter = 'all';
         let currentTimeframeFilter = 'all';
         let currentActiveMagnet = '';
+
+        let currentSortCol = null;
+        let currentSortDir = 'desc';
+
+        function sortTable(column) {{
+            const tbody = document.getElementById('mediaTableBody');
+            if (!tbody) return;
+            const trs = Array.from(tbody.querySelectorAll('tr'));
+
+            if (currentSortCol === column) {{
+                currentSortDir = (currentSortDir === 'asc') ? 'desc' : 'asc';
+            }} else {{
+                currentSortCol = column;
+                if (column === 'title' || column === 'status') {{
+                    currentSortDir = 'asc';
+                }} else {{
+                    currentSortDir = 'desc';
+                }}
+            }}
+
+            trs.sort((a, b) => {{
+                let valA, valB;
+                if (column === 'title') {{
+                    valA = (a.getAttribute('data-title') || '').toLowerCase();
+                    valB = (b.getAttribute('data-title') || '').toLowerCase();
+                    return currentSortDir === 'asc' ? valA.localeCompare(valB) : valB.localeCompare(valA);
+                }} else if (column === 'date') {{
+                    valA = a.getAttribute('data-release-date') || '';
+                    valB = b.getAttribute('data-release-date') || '';
+                    if (!valA) valA = (a.getAttribute('data-year') && a.getAttribute('data-year') !== '0') ? (a.getAttribute('data-year') + '-01-01') : '';
+                    if (!valB) valB = (b.getAttribute('data-year') && b.getAttribute('data-year') !== '0') ? (b.getAttribute('data-year') + '-01-01') : '';
+                    if (!valA && !valB) return 0;
+                    if (!valA) return 1;
+                    if (!valB) return -1;
+                    return currentSortDir === 'asc' ? valA.localeCompare(valB) : valB.localeCompare(valA);
+                }} else if (column === 'score') {{
+                    valA = parseFloat(a.getAttribute('data-score')) || 0;
+                    valB = parseFloat(b.getAttribute('data-score')) || 0;
+                    return currentSortDir === 'asc' ? valA - valB : valB - valA;
+                }} else if (column === 'size') {{
+                    valA = parseInt(a.getAttribute('data-size-bytes')) || 0;
+                    valB = parseInt(b.getAttribute('data-size-bytes')) || 0;
+                    return currentSortDir === 'asc' ? valA - valB : valB - valA;
+                }} else if (column === 'status') {{
+                    valA = (a.getAttribute('data-status') || '').toLowerCase();
+                    valB = (b.getAttribute('data-status') || '').toLowerCase();
+                    return currentSortDir === 'asc' ? valA.localeCompare(valB) : valB.localeCompare(valA);
+                }}
+                return 0;
+            }});
+
+            trs.forEach(r => tbody.appendChild(r));
+
+            document.querySelectorAll('th.sortable').forEach(th => {{
+                const col = th.getAttribute('data-sort');
+                const icon = th.querySelector('.sort-icon');
+                th.classList.remove('sorted-asc', 'sorted-desc');
+                if (col === currentSortCol) {{
+                    th.classList.add(currentSortDir === 'asc' ? 'sorted-asc' : 'sorted-desc');
+                    if (icon) icon.textContent = currentSortDir === 'asc' ? '▲' : '▼';
+                }} else {{
+                    if (icon) icon.textContent = '↕';
+                }}
+            }});
+        }}
 
         function showToast(msg, type) {{
             const c = document.getElementById('toastContainer');
