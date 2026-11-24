@@ -20,6 +20,7 @@ __pycache__/
 plex_library_profile.json
 output/
 data/
+scratch/
 *.db
 *.tmp
 *.sqlite
