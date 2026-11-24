@@ -110,6 +110,18 @@ class MediaFilter:
     def load_plex_profile(self):
         """Load Plex lookup index and category preference counts."""
         if not self.profile_path.exists():
+            # Fallback to multi-user profiles in data/profiles/
+            seed_profile = Path("data") / "profiles" / "ihargreaves@hotmail.co.uk_library_profile.json"
+            if seed_profile.exists():
+                self.profile_path = seed_profile
+            else:
+                profiles_dir = Path("data") / "profiles"
+                if profiles_dir.exists():
+                    found = list(profiles_dir.glob("*_library_profile.json"))
+                    if found:
+                        self.profile_path = found[0]
+
+        if not self.profile_path.exists():
             logger.warning(f"Plex profile '{self.profile_path}' not found. Duplicate checks and genre matching disabled.")
             return
 
