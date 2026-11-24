@@ -4,7 +4,7 @@ This document outlines the planned milestones, upcoming features, and technical 
 
 ---
 
-## Current Status (v0.6.0)
+## Current Status (v0.7.0)
 - [x] **Unified Web Application (`app.py`)**: Self-contained FastAPI + Uvicorn server running on port 8080.
 - [x] **Flat-File User Authentication (`/login`)**: Email-based login and registration with password hashing (SHA-256 + salt) and cookie sessions.
 - [x] **Web Configuration Page (`/settings`)**: Live connection testing and library syncing for Plex/Jellyfin/Emby, Plex 1-click OAuth PIN, downloader testing for Radarr/ruTorrent/qBittorrent, and taste preference sliders.
@@ -12,12 +12,15 @@ This document outlines the planned milestones, upcoming features, and technical 
 - [x] **Visual Movie Posters & Hover Zoom**: 44×64px thumbnails in media cell expanding to 160×240px artwork preview on mouse hover.
 - [x] **Relative Timeframe Filtering**: Filter by Last 7 Days, Last 30 Days, Last 90 Days, Last 12 Months, Specific Year, or Any.
 - [x] **Stacked Dual-Source Links**: Direct site record links to The Pirate Bay (`PB ↗`) and `uIndex ↗` stacked vertically in compact column.
-- [x] **Table Column Sorting & Long Date Display**: Click-to-sort by Title, Released, Size, IMDb Score, and Filter Status with human-readable long date formatting (e.g. 6 June 2026).
+- [x] **Table Column Sorting & Long Date Display**: Click-to-sort by Title, Released, Size, IMDb Score, and Filter Status with human-readable long date formatting (e.g. 15 February 2026).
+- [x] **In-App User Feedback System**: Floating feedback modal with quick sentiment rating pills (😍 Love it, 👍 Good, 💡 Idea, 🪲 Bug) and direct submission endpoint (`/api/feedback`).
+- [x] **Official Daily IMDb Ratings Prioritization**: Autoritative daily IMDb exports (`datasets.imdbws.com`) indexed in local SQLite prioritized over stale third-party caches to eliminate rating discrepancies.
+- [x] **Enhanced Non-English & Co-Production Filtering**: Multi-stage language resolution with OMDb official audio tags and primary country evaluation for accurate foreign co-production filtering.
 - [x] **Containerisation & ARM64 Pi 5 Support**: Docker & Docker Compose setup with persistent data volumes running live on Raspberry Pi 5.
 
 ---
 
-## Next Milestone: v0.7.0 (Code Architecture & Frontend Decoupling)
+## Next Milestone: v0.8.0 (Code Architecture & Frontend Decoupling)
 Refactor `app.py` from inline prototype HTML/CSS strings into standard FastAPI Jinja2 templates and dedicated static assets.
 
 - [ ] **Template Engine Integration (`templates/`)**
@@ -34,7 +37,7 @@ Refactor `app.py` from inline prototype HTML/CSS strings into standard FastAPI J
 - [ ] **Docker & Deployment Updates**
   - [ ] Update `docker-compose.yml` and `Dockerfile` to mount `./templates` and `./static`.
   - [ ] Verify test suite passes without regressions.
-  - [ ] Slim `app.py` from ~2,550 lines down to ~350 lines of clean routing and API handlers.
+  - [ ] Slim `app.py` from ~3,200 lines down to ~350 lines of clean routing and API handlers.
 
 ---
 
@@ -125,7 +128,7 @@ Broaden the release scanning coverage, merge multi-source feeds, and implement r
 
 ---
 
-## Phase 6: Codebase Architecture & Frontend Decoupling [Planned - v0.7.0]
+## Phase 6: Codebase Architecture & Frontend Decoupling [Planned - v0.8.0]
 
 Decouple `app.py` by separating presentation concerns (HTML templates, CSS stylesheets, client JS) from application and API routing.
 

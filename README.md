@@ -57,6 +57,12 @@ Like many media server owners, I found myself constantly checking "Top 48h" and 
   - **qBittorrent (WebAPI v2)**: Native integration supporting modern v5.2.0+ API Key (Bearer token) authentication and session cookie fallback, with custom category and path mapping.
   - **ruTorrent**: Direct magnet dispatch via HTTP Basic Auth with automatic start handling.
   - **Manual Magnet Fallback**: If a downloader isn't configured, 1-click copies the direct magnet link to clipboard.
+- **💬 In-App Feedback System**:
+  - Modal dialog accessible directly from the dashboard header for testers and collaborators to submit reactions and thoughts.
+  - Interactive sentiment rating pills (😍 Love it, 👍 Good, 💡 Idea, 🪲 Bug) saved securely in `data/feedback.json`.
+- **⭐ Authoritative IMDb Ratings & Daily Dataset**:
+  - Local SQLite index of official IMDb daily exports (`datasets.imdbws.com`) queried directly with zero network lag, preventing stale cache discrepancies.
+  - Enhanced foreign co-production filtering evaluating primary country of origin and OMDb language tags.
 - **🎨 Brand Identity ("Radar Lens")**:
   - Vector icon combining search discovery (magnifier) with download stream (downward arrow).
   - Dynamic SVG favicon served directly to browser tabs (`/favicon.svg`).
