@@ -52,7 +52,7 @@ class PlexServerProvider(BaseMediaServer):
     name: str = "plex"
 
     def __init__(self, url: Optional[str] = None, token: Optional[str] = None):
-        self.url = (url or os.getenv("PLEX_URL") or "http://localhost:32400").rstrip("/")
+        self.url = (url or os.getenv("PLEX_URL") or "http://<your-plexserver-hostname>:32400").rstrip("/")
         self.token = token or os.getenv("PLEX_TOKEN") or ""
         self.server = None
 

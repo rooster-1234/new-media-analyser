@@ -154,7 +154,7 @@ def get_default_settings(username: str) -> Dict[str, Any]:
         "username": username,
         # Media Server Settings (always blank for new users)
         "media_server": "plex",
-        "plex_url": "http://localhost:32400",
+        "plex_url": "http://<your-plexserver-hostname>:32400",
         "plex_token": "",
         "plex_movie_libraries": "",
         "plex_tv_libraries": "",

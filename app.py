@@ -141,7 +141,7 @@ def ensure_user_library_profile(username: str) -> Path:
     try:
         provider = None
         if server_type == "plex" and settings.get("plex_token"):
-            provider = PlexServerProvider(url=settings.get("plex_url", "http://localhost:32400"), token=settings.get("plex_token"))
+            provider = PlexServerProvider(url=settings.get("plex_url", "http://<your-plexserver-hostname>:32400"), token=settings.get("plex_token"))
         elif server_type == "jellyfin" and settings.get("jellyfin_key"):
             provider = JellyfinServerProvider(url=settings.get("jellyfin_url", "http://localhost:8096"), api_key=settings.get("jellyfin_key"))
         elif server_type == "emby" and settings.get("emby_key"):
@@ -226,7 +226,7 @@ class AuthModel(BaseModel):
 
 class SettingsUpdateModel(BaseModel):
     media_server: Optional[str] = "plex"
-    plex_url: Optional[str] = "http://localhost:32400"
+    plex_url: Optional[str] = "http://<your-plexserver-hostname>:32400"
     plex_token: Optional[str] = ""
     plex_movie_libraries: Optional[str] = ""
     plex_tv_libraries: Optional[str] = ""
@@ -1171,19 +1171,10 @@ def render_settings_page(username: str, settings: Dict[str, Any]) -> str:
 
             <!-- Plex Inputs -->
             <div id="fields_plex" style="display: {'block' if (media_server == 'plex' or media_server == 'all') else 'none'};">
-                <div style="background: rgba(229, 160, 13, 0.08); border: 1px solid rgba(229, 160, 13, 0.25); border-radius: 8px; padding: 12px 16px; margin-bottom: 14px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px;">
-                    <div>
-                        <div style="font-weight: 600; color: #fbbf24; font-size: 14px; margin-bottom: 2px;">⚡ 1-Click Plex Authorization</div>
-                        <div style="font-size: 12px; color: #cbd5e1;">Your token does not need to be entered manually. Click below to sign in with your Plex account to create and link your token automatically.</div>
-                    </div>
-                    <button type="button" id="btnPlexOAuth" onclick="startPlexOAuth()" style="background: #e5a00d; color: #000; font-weight: 700; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; display: flex; align-items: center; gap: 8px; font-size: 13px; transition: all 0.15s ease;">
-                        <span>Sign In with Plex</span>
-                    </button>
-                </div>
-                <div class="form-grid">
+                <div class="form-grid" style="margin-bottom: 14px;">
                     <div class="form-group">
                         <label>Plex Server URL</label>
-                        <input type="text" id="plex_url" value="{html.escape(settings.get('plex_url', ''))}" placeholder="http://192.168.0.2:32400">
+                        <input type="text" id="plex_url" value="{html.escape(settings.get('plex_url', ''))}" placeholder="http://<your-plexserver-hostname>:32400">
                     </div>
                     <div class="form-group">
                         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
@@ -1192,6 +1183,15 @@ def render_settings_page(username: str, settings: Dict[str, Any]) -> str:
                         </div>
                         <input type="text" id="plex_token" value="{html.escape(settings.get('plex_token', ''))}" placeholder="Generated automatically via Sign In with Plex" readonly style="background: #202020; color: #94a3b8; cursor: not-allowed;">
                     </div>
+                </div>
+                <div style="background: rgba(229, 160, 13, 0.08); border: 1px solid rgba(229, 160, 13, 0.25); border-radius: 8px; padding: 12px 16px; margin-bottom: 14px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px;">
+                    <div>
+                        <div style="font-weight: 600; color: #fbbf24; font-size: 14px; margin-bottom: 2px;">⚡ 1-Click Plex Authorization</div>
+                        <div style="font-size: 12px; color: #cbd5e1;">Enter your Plex Server URL above first, then click below to sign in with your Plex account to link your token automatically. Your token does not need to be entered manually.</div>
+                    </div>
+                    <button type="button" id="btnPlexOAuth" onclick="startPlexOAuth()" style="background: #e5a00d; color: #000; font-weight: 700; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; display: flex; align-items: center; gap: 8px; font-size: 13px; transition: all 0.15s ease;">
+                        <span>Sign In with Plex</span>
+                    </button>
                 </div>
             </div>
 
@@ -1410,6 +1410,13 @@ def render_settings_page(username: str, settings: Dict[str, Any]) -> str:
 
         let plexPollInterval = null;
         async function startPlexOAuth() {{
+            const plexUrl = (document.getElementById('plex_url').value || '').trim();
+            if (!plexUrl || plexUrl.includes('<your-plexserver-hostname>')) {{
+                alert('Please enter your actual Plex Server URL above first (e.g. http://192.168.0.2:32400 or http://NAS:32400).');
+                document.getElementById('plex_url').focus();
+                return;
+            }}
+
             const btn = document.getElementById('btnPlexOAuth');
             const originalHtml = btn.innerHTML;
             btn.disabled = true;
@@ -3004,7 +3011,7 @@ async def api_test_media_server(data: Dict[str, Any], username: str = Depends(re
     server_type = (data.get("media_server") or "plex").lower()
     try:
         if server_type == "plex":
-            url = data.get("plex_url") or "http://localhost:32400"
+            url = data.get("plex_url") or "http://<your-plexserver-hostname>:32400"
             token = data.get("plex_token") or ""
             provider = PlexServerProvider(url=url, token=token)
         elif server_type == "jellyfin":
